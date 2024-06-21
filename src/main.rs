@@ -1,8 +1,9 @@
 use std::fmt::Debug;
 use std::fs::read_to_string;
+use std::io::Write;
 use std::path::Path;
 use std::process::exit;
-use std::{env, error};
+use std::{env, error, io};
 
 use thiserror::Error;
 
@@ -24,9 +25,12 @@ fn main() -> Result<(), color_eyre::eyre::Error> {
         println!("Usage: rlox [script]");
         exit(64);
     }
-
-    let file_path = &args[1];
-    run_file(file_path)?;
+    if args.len() == 2 {
+        let file_path = &args[1];
+        run_file(file_path)?;
+    } else {
+        run_prompt()?;
+    }
     Ok(())
 }
 
@@ -41,5 +45,25 @@ fn run_file(path_string: &String) -> Result<(), CLIError> {
     }
     let self_content = read_to_string(path)?;
     println!("FILE CONTENT {self_content}");
+    run(self_content);
     return Ok(());
+}
+
+fn run_prompt() -> Result<(), CLIError> {
+    fn prompt() {
+        print!("> ");
+        io::stdout().flush().unwrap();
+    }
+
+    let lines = io::stdin().lines();
+    prompt();
+    for line in lines {
+        run(line.unwrap());
+        prompt();
+    }
+    Ok(())
+}
+
+fn run(source: String) {
+    println!("{source}")
 }
