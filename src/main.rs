@@ -67,3 +67,11 @@ fn run_prompt() -> Result<(), CLIError> {
 fn run(source: String) {
     println!("{source}")
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_scanner() {
+        assert_eq!(2, 1 + 1)
+    }
+}
