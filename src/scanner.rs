@@ -256,6 +256,19 @@ fn match_keyword(input: &str) -> Option<TokenType> {
     }
 }
 
+fn is_digit(c: char) -> bool {
+    match c {
+        '0'..='9' => true,
+        _ => false,
+    }
+}
+fn is_alphanumeric(c: char) -> bool {
+    match c {
+        'a'..='z' | 'A'..='Z' | '_' => true,
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::scanner::Scanner;
@@ -349,18 +362,5 @@ mod tests {
                 lexeme: "1.2".to_string()
             }
         );
-    }
-}
-
-fn is_digit(c: char) -> bool {
-    match c {
-        '0'..='9' => true,
-        _ => false,
-    }
-}
-fn is_alphanumeric(c: char) -> bool {
-    match c {
-        'a'..='z' | 'A'..='Z' | '_' => true,
-        _ => false,
     }
 }
