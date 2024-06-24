@@ -8,6 +8,7 @@ use std::path::Path;
 use std::process::exit;
 use std::{env, error, io};
 
+use crate::scanner::{Scanner, ScanningError};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -69,11 +70,20 @@ fn run_prompt() -> Result<(), CLIError> {
 }
 
 fn run(source: String) {
-    println!("{source}")
+    // passing a 'handle error' callback to stick to the book.
+    let mut scanner = Scanner::new(source, scanner_error);
+    scanner.scan_tokens();
+    for token in scanner.tokens {
+        println!("{token:?}");
+    }
 }
 
-fn tokenizer_error(line: usize, message: String) {
-    report(line, "", &message)
+fn scanner_error(err: ScanningError) {
+    match err {
+        ScanningError::UnexpectedCharacter { line, character: _ } => {
+            report(line, "", &format!("{err}"))
+        }
+    }
 }
 
 fn report(line: usize, location: &str, message: &str) {

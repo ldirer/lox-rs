@@ -1,8 +1,12 @@
 use crate::token::{Token, TokenType};
+use std::error::Error;
+use std::iter::Scan;
+use thiserror::Error;
 
-struct Scanner {
+pub struct Scanner {
     source: String,
-    tokens: Vec<Token>,
+    pub(crate) tokens: Vec<Token>,
+    error_reporter: fn(ScanningError) -> (),
 
     // position of the start of lexeme
     start: usize,
@@ -10,19 +14,29 @@ struct Scanner {
     line: usize,
 }
 
+#[derive(Debug, Error)]
+pub enum ScanningError {
+    #[error("Unexpected character {character:?}")]
+    UnexpectedCharacter { line: usize, character: char },
+}
+
 impl Scanner {
-    fn new(source: String) -> Scanner {
+    pub(crate) fn new(source: String, error_reporter: fn(ScanningError) -> ()) -> Scanner {
         Scanner {
             source,
             tokens: vec![],
+            error_reporter,
             start: 0,
             current: 0,
             line: 1,
         }
     }
-    fn scan_tokens(&mut self) {
+    pub(crate) fn scan_tokens(&mut self) {
         while !self.is_at_end() {
-            self.scan_token();
+            let maybe_error = self.scan_token();
+            if let Some(scanning_error) = maybe_error {
+                (self.error_reporter)(scanning_error)
+            }
         }
         self.tokens.push(Token {
             r#type: TokenType::EOF,
@@ -31,7 +45,7 @@ impl Scanner {
         });
     }
 
-    fn scan_token(&mut self) {
+    fn scan_token(&mut self) -> Option<ScanningError> {
         let c: char = self.advance();
         let token_type = match c {
             '(' => Some(TokenType::LeftParen),
@@ -46,12 +60,17 @@ impl Scanner {
             '*' => Some(TokenType::Star),
             _ => None,
         };
+        // println!("{:#?}", token_type);
 
         if let Some(regular_token_type) = token_type {
             self.add_token(regular_token_type);
-            self.start = self.current;
-            return;
+            return None;
         }
+        self.start = self.current;
+        return Some(ScanningError::UnexpectedCharacter {
+            line: self.line,
+            character: c,
+        });
     }
 
     fn is_at_end(&self) -> bool {
@@ -61,7 +80,7 @@ impl Scanner {
         // this is NOT efficient at all, we are re-reading all characters in the source every time
         let current_char = self.source.chars().nth(self.current);
         self.current += 1;
-        println!("CURRENT CAR {current_char:?}");
+        // println!("CURRENT CAR {current_char:?}");
         // unwrapping \o/
         // I guess we could use the None case to detect the end of the file
         current_char.unwrap()
@@ -73,6 +92,7 @@ impl Scanner {
             lexeme: text,
             line: self.line,
         });
+        self.start = self.current;
     }
 }
 
@@ -83,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_scanning_regular_tokens() {
-        let mut scanner = Scanner::new("{,.}".to_string());
+        let mut scanner = Scanner::new("{,.}".to_string(), |_err| ());
         scanner.scan_tokens();
         // array comparison is not super helpful when this fails.
         assert_eq!(
