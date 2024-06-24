@@ -1,34 +1,12 @@
 #[derive(Debug, PartialEq)]
-pub enum TokenTypeLiteral {
-    Identifier,
-    String,
-    Number,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct TokenRegular {
-    pub(crate) r#type: TokenTypeRegular,
+pub struct Token {
+    pub(crate) r#type: TokenType,
     pub(crate) lexeme: String,
     pub(crate) line: usize,
 }
-type Object = String;
 
 #[derive(Debug, PartialEq)]
-pub struct TokenLiteral {
-    r#type: TokenTypeLiteral,
-    lexeme: String,
-    line: usize,
-    literal: Object,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Token {
-    Regular(TokenRegular),
-    Literal(TokenLiteral),
-}
-
-#[derive(Debug, PartialEq)]
-pub enum TokenTypeRegular {
+pub enum TokenType {
     // Single-character tokens
     LeftParen,
     RightParen,
@@ -69,6 +47,10 @@ pub enum TokenTypeRegular {
     True,
     Var,
     While,
+
+    Identifier(String),
+    String(String),
+    Number(f64),
 
     EOF,
 }

@@ -1,4 +1,4 @@
-use crate::token::{Token, TokenRegular, TokenTypeLiteral, TokenTypeRegular};
+use crate::token::{Token, TokenType};
 
 struct Scanner {
     source: String,
@@ -24,26 +24,26 @@ impl Scanner {
         while !self.is_at_end() {
             self.scan_token();
         }
-        self.tokens.push(Token::Regular(TokenRegular {
-            r#type: TokenTypeRegular::EOF,
+        self.tokens.push(Token {
+            r#type: TokenType::EOF,
             lexeme: "".to_string(),
             line: self.line,
-        }));
+        });
     }
 
     fn scan_token(&mut self) {
         let c: char = self.advance();
         let token_type = match c {
-            '(' => Some(TokenTypeRegular::LeftParen),
-            ')' => Some(TokenTypeRegular::RightParen),
-            '{' => Some(TokenTypeRegular::LeftBrace),
-            '}' => Some(TokenTypeRegular::RightBrace),
-            ',' => Some(TokenTypeRegular::Comma),
-            '.' => Some(TokenTypeRegular::Dot),
-            '-' => Some(TokenTypeRegular::Minus),
-            '+' => Some(TokenTypeRegular::Plus),
-            ';' => Some(TokenTypeRegular::Semicolon),
-            '*' => Some(TokenTypeRegular::Star),
+            '(' => Some(TokenType::LeftParen),
+            ')' => Some(TokenType::RightParen),
+            '{' => Some(TokenType::LeftBrace),
+            '}' => Some(TokenType::RightBrace),
+            ',' => Some(TokenType::Comma),
+            '.' => Some(TokenType::Dot),
+            '-' => Some(TokenType::Minus),
+            '+' => Some(TokenType::Plus),
+            ';' => Some(TokenType::Semicolon),
+            '*' => Some(TokenType::Star),
             _ => None,
         };
 
@@ -66,53 +66,54 @@ impl Scanner {
         // I guess we could use the None case to detect the end of the file
         current_char.unwrap()
     }
-    fn add_token(&mut self, token_type: TokenTypeRegular) {
+    fn add_token(&mut self, token_type: TokenType) {
         let text: String = self.source[self.start..self.current].to_string();
-        self.tokens.push(Token::Regular(TokenRegular {
+        self.tokens.push(Token {
             r#type: token_type,
             lexeme: text,
             line: self.line,
-        }));
+        });
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::scanner::Scanner;
-    use crate::token::{Token, TokenRegular, TokenTypeRegular};
+    use crate::token::{Token, TokenType};
 
     #[test]
     fn test_scanning_regular_tokens() {
         let mut scanner = Scanner::new("{,.}".to_string());
         scanner.scan_tokens();
+        // array comparison is not super helpful when this fails.
         assert_eq!(
             scanner.tokens,
             vec![
-                Token::Regular(TokenRegular {
-                    r#type: TokenTypeRegular::LeftBrace,
+                Token {
+                    r#type: TokenType::LeftBrace,
                     line: 1,
                     lexeme: "{".to_string()
-                }),
-                Token::Regular(TokenRegular {
-                    r#type: TokenTypeRegular::Comma,
+                },
+                Token {
+                    r#type: TokenType::Comma,
                     line: 1,
                     lexeme: ",".to_string()
-                }),
-                Token::Regular(TokenRegular {
-                    r#type: TokenTypeRegular::Dot,
+                },
+                Token {
+                    r#type: TokenType::Dot,
                     line: 1,
                     lexeme: ".".to_string()
-                }),
-                Token::Regular(TokenRegular {
-                    r#type: TokenTypeRegular::RightBrace,
+                },
+                Token {
+                    r#type: TokenType::RightBrace,
                     line: 1,
                     lexeme: "}".to_string()
-                }),
-                Token::Regular(TokenRegular {
-                    r#type: TokenTypeRegular::EOF,
+                },
+                Token {
+                    r#type: TokenType::EOF,
                     line: 1,
                     lexeme: "".to_string()
-                }),
+                },
             ]
         )
     }
