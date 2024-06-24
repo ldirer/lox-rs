@@ -1,3 +1,6 @@
+mod scanner;
+mod token;
+
 use std::fmt::Debug;
 use std::fs::read_to_string;
 use std::io::Write;
@@ -58,6 +61,7 @@ fn run_prompt() -> Result<(), CLIError> {
     let lines = io::stdin().lines();
     prompt();
     for line in lines {
+        // TODO reset error status somehow
         run(line.unwrap());
         prompt();
     }
@@ -66,6 +70,15 @@ fn run_prompt() -> Result<(), CLIError> {
 
 fn run(source: String) {
     println!("{source}")
+}
+
+fn tokenizer_error(line: usize, message: String) {
+    report(line, "", &message)
+}
+
+fn report(line: usize, location: &str, message: &str) {
+    println!("[line {line}] Error {location}: {message}")
+    //     TODO had_error = true
 }
 
 #[cfg(test)]
