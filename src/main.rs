@@ -1,6 +1,3 @@
-mod scanner;
-mod token;
-
 use std::fmt::Debug;
 use std::fs::read_to_string;
 use std::io::Write;
@@ -8,8 +5,12 @@ use std::path::Path;
 use std::process::exit;
 use std::{env, error, io};
 
-use crate::scanner::{Scanner, ScanningError};
 use thiserror::Error;
+
+use crate::scanner::{Scanner, ScanningError};
+
+mod scanner;
+mod token;
 
 #[derive(Debug, Error)]
 enum CLIError {
@@ -83,6 +84,10 @@ fn scanner_error(err: ScanningError) {
         ScanningError::UnexpectedCharacter { line, character: _ } => {
             report(line, "", &format!("{err}"))
         }
+        ScanningError::UnterminatedString {
+            line,
+            string_start: _,
+        } => report(line, "", &format!("{err}")),
     }
 }
 
