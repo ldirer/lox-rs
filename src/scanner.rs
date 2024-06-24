@@ -63,36 +63,36 @@ impl Scanner {
             ';' => Some(TokenType::Semicolon),
             '*' => Some(TokenType::Star),
             '!' => {
-                if self.match_next('=') {
+                if self.match_one('=') {
                     Some(TokenType::BangEqual)
                 } else {
                     Some(TokenType::Bang)
                 }
             }
             '=' => {
-                if self.match_next('=') {
+                if self.match_one('=') {
                     Some(TokenType::EqualEqual)
                 } else {
                     Some(TokenType::Equal)
                 }
             }
             '<' => {
-                if self.match_next('=') {
+                if self.match_one('=') {
                     Some(TokenType::LessEqual)
                 } else {
                     Some(TokenType::Less)
                 }
             }
             '>' => {
-                if self.match_next('=') {
+                if self.match_one('=') {
                     Some(TokenType::GreaterEqual)
                 } else {
                     Some(TokenType::Greater)
                 }
             }
             '/' => {
-                if self.match_next('/') {
-                    while self.peek_next() != Some('\n') && self.peek_next() != None {
+                if self.match_one('/') {
+                    while self.peek_one() != Some('\n') && self.peek_one() != None {
                         self.advance();
                     }
                     None
@@ -106,6 +106,8 @@ impl Scanner {
                 None
             }
             '"' => Some(self.consume_if_match_string()?),
+            '0'..='9' => Some(self.consume_if_match_number()),
+            'a'..='z' | 'A'..='Z' | '_' => Some(self.consume_if_match_identifier()),
             _ => {
                 self.start = self.current;
                 return Err(ScanningError::UnexpectedCharacter {
@@ -128,7 +130,7 @@ impl Scanner {
         return self.current >= self.source.len();
     }
 
-    fn match_next(&mut self, expected: char) -> bool {
+    fn match_one(&mut self, expected: char) -> bool {
         if self.is_at_end() {
             return false;
         }
@@ -157,13 +159,16 @@ impl Scanner {
         self.start = self.current;
     }
 
-    /// like advance but does not consume the character
-    fn peek_next(&self) -> Option<char> {
-        // if self.is_at_end() {
-        //     return None;
-        // }
+    /// like advance but does not consume the character. 1 lookahead.
+    fn peek_one(&self) -> Option<char> {
         self.source.chars().nth(self.current)
     }
+
+    // 2 lookahead
+    fn peek_two(&self) -> Option<char> {
+        self.source.chars().nth(self.current + 1)
+    }
+
     // TODO question: I'd prefer that to return `Result<TokenType::String, ScanningError::UnterminatedString>`.
     // But these are not types, the compiler complains:
     // error[E0573]: expected type, found variant `ScanningError::UnterminatedString`
@@ -175,13 +180,14 @@ impl Scanner {
     // |                                    not a type
     // |                                    help: try using the variant's enum: `crate::ScanningError`
     fn consume_if_match_string(&mut self) -> Result<TokenType, ScanningError> {
-        while self.peek_next() != None && self.peek_next() != Some('"') {
-            if self.peek_next() == Some('\n') {
+        while self.peek_one() != None && self.peek_one() != Some('"') {
+            if self.peek_one() == Some('\n') {
                 self.line += 1;
             }
             self.advance();
         }
-        if self.peek_next() == None {
+
+        if self.peek_one() == None {
             self.start = self.current;
             return Err(UnterminatedString {
                 line: self.line,
@@ -189,9 +195,64 @@ impl Scanner {
             });
         }
 
+        // consume closing quote
+        self.advance();
+
         return Ok(TokenType::String(
-            self.source[self.start..self.current].to_string(),
+            // string without the quotes
+            self.source[self.start + 1..self.current - 1].to_string(),
         ));
+    }
+    fn consume_if_match_number(&mut self) -> TokenType {
+        while self.peek_one().is_some_and(is_digit) {
+            self.advance();
+        }
+
+        if self.peek_one() == Some('.') && self.peek_two().is_some_and(is_digit) {
+            // consume the '.'
+            self.advance();
+        }
+
+        while self.peek_one().is_some_and(is_digit) {
+            self.advance();
+        }
+
+        TokenType::Number(self.source[self.start..self.current].parse().unwrap())
+    }
+    fn consume_if_match_identifier(&mut self) -> TokenType {
+        while self.peek_one().is_some_and(is_alphanumeric) {
+            self.advance();
+        }
+
+        let lexeme = self.source[self.start..self.current].to_string();
+        if let Some(keyword_token) = match_keyword(&lexeme) {
+            return keyword_token;
+        }
+        TokenType::Identifier(lexeme)
+    }
+}
+
+fn match_keyword(input: &str) -> Option<TokenType> {
+    // TODO not great that nothing tells us we need to update this when we add a keyword
+    // it's not really a frequent operation but still would be nice.
+    match input {
+        "and" => Some(TokenType::And),
+        "class" => Some(TokenType::Class),
+        "else" => Some(TokenType::Else),
+        "false" => Some(TokenType::False),
+        "fun" => Some(TokenType::Fun),
+        "for" => Some(TokenType::For),
+        "if" => Some(TokenType::If),
+        "nil" => Some(TokenType::Nil),
+        "or" => Some(TokenType::Or),
+        "print" => Some(TokenType::Print),
+        "return" => Some(TokenType::Return),
+        "super" => Some(TokenType::Super),
+        "this" => Some(TokenType::This),
+        "true" => Some(TokenType::True),
+        "var" => Some(TokenType::Var),
+        "while" => Some(TokenType::While),
+        _ => None,
     }
 }
 
@@ -257,5 +318,49 @@ mod tests {
                 },
             ]
         )
+    }
+    #[test]
+    fn test_scanner_handles_strings() {
+        let mut scanner = Scanner::new("\"hello\"".to_string(), |err| panic!("{err:?}"));
+        scanner.scan_tokens();
+        // println!("{:#?}", scanner.tokens);
+        assert_eq!(scanner.tokens.len(), 2);
+        assert_eq!(
+            scanner.tokens[0],
+            Token {
+                r#type: TokenType::String("hello".to_string()),
+                line: 1,
+                lexeme: "\"hello\"".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_scanner_handles_numbers() {
+        let mut scanner = Scanner::new("1.2".to_string(), |err| panic!("{err:?}"));
+        scanner.scan_tokens();
+        // println!("{:#?}", scanner.tokens);
+        assert_eq!(scanner.tokens.len(), 2);
+        assert_eq!(
+            scanner.tokens[0],
+            Token {
+                r#type: TokenType::Number(1.2),
+                line: 1,
+                lexeme: "1.2".to_string()
+            }
+        );
+    }
+}
+
+fn is_digit(c: char) -> bool {
+    match c {
+        '0'..='9' => true,
+        _ => false,
+    }
+}
+fn is_alphanumeric(c: char) -> bool {
+    match c {
+        'a'..='z' | 'A'..='Z' | '_' => true,
+        _ => false,
     }
 }
