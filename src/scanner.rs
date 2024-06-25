@@ -58,6 +58,8 @@ impl Scanner<'_> {
     }
 
     fn scan_token(&mut self) -> Result<(), ScanningError> {
+        // set start of lexeme
+        self.start = self.current;
         let c: char = self.advance();
         let maybe_token_type = match c {
             '(' => Some(TokenType::LeftParen),
@@ -105,7 +107,6 @@ impl Scanner<'_> {
             c if is_digit(&c) => Some(self.consume_if_match_number()),
             c if is_alphanumeric(&c) => Some(self.consume_if_match_identifier()),
             _ => {
-                self.start = self.current;
                 return Err(ScanningError::UnexpectedCharacter {
                     line: self.line,
                     character: c,
@@ -118,7 +119,6 @@ impl Scanner<'_> {
             self.add_token(token_type);
             return Ok(());
         }
-        self.start = self.current;
         Ok(())
     }
 
@@ -158,7 +158,6 @@ impl Scanner<'_> {
             lexeme: text,
             line: self.line,
         });
-        self.start = self.current;
     }
 
     /// like advance but does not consume the character. 1 lookahead.
@@ -198,7 +197,6 @@ impl Scanner<'_> {
         }
 
         if self.peek_one() == None {
-            self.start = self.current;
             return Err(ScanningError::UnterminatedString {
                 line: self.line,
                 string_start: self.source[self.start..self.current].to_string(),
