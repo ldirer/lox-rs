@@ -1,16 +1,19 @@
+use std::iter::Peekable;
+use std::str::{from_utf8, Chars};
 use thiserror::Error;
 
 use crate::token::{Token, TokenType};
 
 /// public interface for tokenizing
 pub fn tokenize(source: String, error_reporter: fn(ScanningError) -> ()) -> Vec<Token> {
-    let mut scanner = Scanner::new(source, error_reporter);
+    let mut scanner = Scanner::new(&source, error_reporter);
     scanner.scan_tokens();
     scanner.tokens
 }
 
-struct Scanner {
-    source: String,
+struct Scanner<'a> {
+    source: &'a str,
+    char_iter: Peekable<Chars<'a>>,
     tokens: Vec<Token>,
     error_reporter: fn(ScanningError) -> (),
 
@@ -28,10 +31,11 @@ pub enum ScanningError {
     UnterminatedString { line: usize, string_start: String },
 }
 
-impl Scanner {
-    fn new(source: String, error_reporter: fn(ScanningError) -> ()) -> Scanner {
+impl Scanner<'_> {
+    fn new(source: &str, error_reporter: fn(ScanningError) -> ()) -> Scanner {
         Scanner {
             source,
+            char_iter: source.chars().peekable(),
             tokens: vec![],
             error_reporter,
             start: 0,
@@ -84,7 +88,7 @@ impl Scanner {
             },
             '/' => {
                 if self.match_one('/') {
-                    while self.peek_one() != Some('\n') && self.peek_one() != None {
+                    while self.peek_one() != Some(&'\n') && self.peek_one() != None {
                         self.advance();
                     }
                     None
@@ -98,8 +102,8 @@ impl Scanner {
                 None
             }
             '"' => Some(self.consume_if_match_string()?),
-            c if is_digit(c) => Some(self.consume_if_match_number()),
-            c if is_alphanumeric(c) => Some(self.consume_if_match_identifier()),
+            c if is_digit(&c) => Some(self.consume_if_match_number()),
+            c if is_alphanumeric(&c) => Some(self.consume_if_match_identifier()),
             _ => {
                 self.start = self.current;
                 return Err(ScanningError::UnexpectedCharacter {
@@ -126,22 +130,28 @@ impl Scanner {
         if self.is_at_end() {
             return false;
         }
-        if self.source.chars().nth(self.current) != Some(expected) {
+        if self.peek_one() != Some(&expected) {
             return false;
         }
-        self.current += 1;
+        self.advance();
         return true;
     }
     fn advance(&mut self) -> char {
-        // this is NOT efficient at all, we are re-reading all characters in the source every time
-        let current_char = self.source.chars().nth(self.current);
-        self.current += 1;
-        // println!("CURRENT CAR {current_char:?}");
         // unwrapping \o/
         // I guess we could use the None case to detect the end of the file
-        current_char.unwrap()
+        match self.char_iter.next() {
+            Some(current_char) => {
+                self.current += current_char.len_utf8();
+                Some(current_char)
+            }
+            None => None,
+        }
+        .unwrap()
     }
     fn add_token(&mut self, token_type: TokenType) {
+        // /!\ using a string slice is a dangerous thing!
+        // We might be slicing at something that isn't a character boundary (we slice bytes).
+        // https://doc.rust-lang.org/book/ch08-02-strings.html#indexing-into-strings
         let text: String = self.source[self.start..self.current].to_string();
         self.tokens.push(Token {
             r#type: token_type,
@@ -152,13 +162,21 @@ impl Scanner {
     }
 
     /// like advance but does not consume the character. 1 lookahead.
-    fn peek_one(&self) -> Option<char> {
-        self.source.chars().nth(self.current)
+    fn peek_one(&mut self) -> Option<&char> {
+        self.char_iter.peek()
     }
 
-    // 2 lookahead
+    /// 2 lookahead
+    /// Sad that it doesn't return a reference to be consistent with its friend peek_one.
+    /// The implementation can't help it though. It's hacky.
+    /// Ideally we'd use an iterator that allows peek(2) but it's probably a bit involved (though
+    /// I think simple on principle?) to implement the Iterator trait for a PeekableTwo type.
     fn peek_two(&self) -> Option<char> {
-        self.source.chars().nth(self.current + 1)
+        // HOW WOULD I KNOW HOW MANY BYTES ARE NEEDED FOR ONE CHARACTER? I CANT. I NEED THE CHARS THING.
+        from_utf8(&self.source.as_bytes()[self.current..])
+            .expect("play with strings, utf-8, and get burned")
+            .chars()
+            .nth(1)
     }
 
     // TODO question: I'd prefer that to return `Result<TokenType::String, ScanningError::UnterminatedString>`.
@@ -172,8 +190,8 @@ impl Scanner {
     // |                                    not a type
     // |                                    help: try using the variant's enum: `crate::ScanningError`
     fn consume_if_match_string(&mut self) -> Result<TokenType, ScanningError> {
-        while self.peek_one() != None && self.peek_one() != Some('"') {
-            if self.peek_one() == Some('\n') {
+        while self.peek_one() != None && self.peek_one() != Some(&'"') {
+            if self.peek_one() == Some(&'\n') {
                 self.line += 1;
             }
             self.advance();
@@ -200,7 +218,7 @@ impl Scanner {
             self.advance();
         }
 
-        if self.peek_one() == Some('.') && self.peek_two().is_some_and(is_digit) {
+        if self.peek_one() == Some(&'.') && self.peek_two().is_some_and(|c| is_digit(&c)) {
             // consume the '.'
             self.advance();
         }
@@ -249,13 +267,13 @@ fn match_keyword(input: &str) -> Option<TokenType> {
     }
 }
 
-fn is_digit(c: char) -> bool {
+fn is_digit(c: &char) -> bool {
     match c {
         '0'..='9' => true,
         _ => false,
     }
 }
-fn is_alphanumeric(c: char) -> bool {
+fn is_alphanumeric(c: &char) -> bool {
     match c {
         'a'..='z' | 'A'..='Z' | '_' => true,
         _ => false,
@@ -264,12 +282,12 @@ fn is_alphanumeric(c: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::scanner::Scanner;
+    use crate::scanner::{tokenize, Scanner};
     use crate::token::{Token, TokenType};
 
     #[test]
     fn test_scanning_regular_tokens() {
-        let mut scanner = Scanner::new("{,.}".to_string(), |_err| ());
+        let mut scanner = Scanner::new("{,.}", |_err| ());
         scanner.scan_tokens();
         // array comparison is not super helpful when this fails.
         assert_eq!(
@@ -306,7 +324,7 @@ mod tests {
 
     #[test]
     fn test_scanning_multiple_character_operator() {
-        let mut scanner = Scanner::new(">=".to_string(), |_err| ());
+        let mut scanner = Scanner::new(">=", |_err| ());
         scanner.scan_tokens();
         // array comparison is not super helpful when this fails.
         assert_eq!(
@@ -327,7 +345,7 @@ mod tests {
     }
     #[test]
     fn test_scanner_handles_strings() {
-        let mut scanner = Scanner::new("\"hello\"".to_string(), |err| panic!("{err:?}"));
+        let mut scanner = Scanner::new("\"hello\"", |err| panic!("{err:?}"));
         scanner.scan_tokens();
         // println!("{:#?}", scanner.tokens);
         assert_eq!(scanner.tokens.len(), 2);
@@ -343,7 +361,7 @@ mod tests {
 
     #[test]
     fn test_scanner_handles_numbers() {
-        let mut scanner = Scanner::new("1.2".to_string(), |err| panic!("{err:?}"));
+        let mut scanner = Scanner::new("1.2", |err| panic!("{err:?}"));
         scanner.scan_tokens();
         // println!("{:#?}", scanner.tokens);
         assert_eq!(scanner.tokens.len(), 2);
@@ -359,7 +377,7 @@ mod tests {
 
     #[test]
     fn test_scanner_handles_numbers_2() {
-        let mut scanner = Scanner::new("1.some".to_string(), |err| panic!("{err:?}"));
+        let mut scanner = Scanner::new("1.some", |err| panic!("{err:?}"));
         scanner.scan_tokens();
         // println!("{:#?}", scanner.tokens);
         assert_eq!(scanner.tokens.len(), 4);
@@ -387,5 +405,15 @@ mod tests {
                 line: 1
             }
         )
+    }
+    #[test]
+    fn test_pretending_to_handle_non_ascii() {
+        let tokens = tokenize("// 🤩 this is all a _façade_".to_string(), |err| {
+            panic!("{err:?}")
+        });
+        // println!("{tokens:#?}");
+        // since we don't parse comments and only alphanumeric characters are allowed in Lox code,
+        // we're really just checking we don't crash :)
+        assert_eq!(tokens.len(), 1);
     }
 }
