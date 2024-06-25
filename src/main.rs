@@ -3,11 +3,11 @@ use std::fs::read_to_string;
 use std::io::Write;
 use std::path::Path;
 use std::process::exit;
-use std::{env, error, io};
+use std::{env, io};
 
 use thiserror::Error;
 
-use crate::scanner::{Scanner, ScanningError};
+use crate::scanner::{tokenize, ScanningError};
 
 mod scanner;
 mod token;
@@ -72,9 +72,7 @@ fn run_prompt() -> Result<(), CLIError> {
 
 fn run(source: String) {
     // passing a 'handle error' callback to stick to the book.
-    let mut scanner = Scanner::new(source, scanner_error);
-    scanner.scan_tokens();
-    for token in scanner.tokens {
+    for token in tokenize(source, scanner_error) {
         println!("{token:?}");
     }
 }

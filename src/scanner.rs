@@ -1,11 +1,15 @@
-use std::error::Error;
-
 use thiserror::Error;
 
-use crate::scanner::ScanningError::UnterminatedString;
 use crate::token::{Token, TokenType};
 
-pub struct Scanner {
+/// public interface for tokenizing
+pub fn tokenize(source: String, error_reporter: fn(ScanningError) -> ()) -> Vec<Token> {
+    let mut scanner = Scanner::new(source, error_reporter);
+    scanner.scan_tokens();
+    scanner.tokens
+}
+
+struct Scanner {
     source: String,
     pub(crate) tokens: Vec<Token>,
     error_reporter: fn(ScanningError) -> (),
@@ -25,7 +29,7 @@ pub enum ScanningError {
 }
 
 impl Scanner {
-    pub(crate) fn new(source: String, error_reporter: fn(ScanningError) -> ()) -> Scanner {
+    fn new(source: String, error_reporter: fn(ScanningError) -> ()) -> Scanner {
         Scanner {
             source,
             tokens: vec![],
@@ -35,7 +39,7 @@ impl Scanner {
             line: 1,
         }
     }
-    pub(crate) fn scan_tokens(&mut self) {
+    fn scan_tokens(&mut self) {
         while !self.is_at_end() {
             let maybe_error = self.scan_token();
             if let Err(scanning_error) = maybe_error {
@@ -177,7 +181,7 @@ impl Scanner {
 
         if self.peek_one() == None {
             self.start = self.current;
-            return Err(UnterminatedString {
+            return Err(ScanningError::UnterminatedString {
                 line: self.line,
                 string_start: self.source[self.start..self.current].to_string(),
             });
