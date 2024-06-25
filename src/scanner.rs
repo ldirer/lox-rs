@@ -11,7 +11,7 @@ pub fn tokenize(source: String, error_reporter: fn(ScanningError) -> ()) -> Vec<
 
 struct Scanner {
     source: String,
-    pub(crate) tokens: Vec<Token>,
+    tokens: Vec<Token>,
     error_reporter: fn(ScanningError) -> (),
 
     // position of the start of lexeme
@@ -355,5 +355,37 @@ mod tests {
                 lexeme: "1.2".to_string()
             }
         );
+    }
+
+    #[test]
+    fn test_scanner_handles_numbers_2() {
+        let mut scanner = Scanner::new("1.some".to_string(), |err| panic!("{err:?}"));
+        scanner.scan_tokens();
+        // println!("{:#?}", scanner.tokens);
+        assert_eq!(scanner.tokens.len(), 4);
+        assert_eq!(
+            scanner.tokens[0],
+            Token {
+                r#type: TokenType::Number(1.0),
+                line: 1,
+                lexeme: "1".to_string()
+            }
+        );
+        assert_eq!(
+            scanner.tokens[1],
+            Token {
+                r#type: TokenType::Dot,
+                line: 1,
+                lexeme: ".".to_string()
+            }
+        );
+        assert_eq!(
+            scanner.tokens[2],
+            Token {
+                r#type: TokenType::Identifier("some".to_string()),
+                lexeme: "some".to_string(),
+                line: 1
+            }
+        )
     }
 }
