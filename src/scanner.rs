@@ -18,7 +18,7 @@ struct Scanner<'a> {
     error_reporter: fn(ScanningError) -> (),
 
     // position of the start of lexeme
-    start: usize,
+    current_lexeme_start: usize,
     current: usize,
     line: usize,
 }
@@ -38,7 +38,7 @@ impl Scanner<'_> {
             char_iter: source.chars().peekable(),
             tokens: vec![],
             error_reporter,
-            start: 0,
+            current_lexeme_start: 0,
             current: 0,
             line: 1,
         }
@@ -59,7 +59,7 @@ impl Scanner<'_> {
 
     fn scan_token(&mut self) -> Result<(), ScanningError> {
         // set start of lexeme
-        self.start = self.current;
+        self.current_lexeme_start = self.current;
         let c: char = self.advance();
         let maybe_token_type = match c {
             '(' => Some(TokenType::LeftParen),
@@ -152,7 +152,7 @@ impl Scanner<'_> {
         // /!\ using a string slice is a dangerous thing!
         // We might be slicing at something that isn't a character boundary (we slice bytes).
         // https://doc.rust-lang.org/book/ch08-02-strings.html#indexing-into-strings
-        let text: String = self.source[self.start..self.current].to_string();
+        let text: String = self.source[self.current_lexeme_start..self.current].to_string();
         self.tokens.push(Token {
             r#type: token_type,
             lexeme: text,
@@ -199,7 +199,7 @@ impl Scanner<'_> {
         if self.peek_one() == None {
             return Err(ScanningError::UnterminatedString {
                 line: self.line,
-                string_start: self.source[self.start..self.current].to_string(),
+                string_start: self.source[self.current_lexeme_start..self.current].to_string(),
             });
         }
 
@@ -208,7 +208,7 @@ impl Scanner<'_> {
 
         return Ok(TokenType::String(
             // string without the quotes
-            self.source[self.start + 1..self.current - 1].to_string(),
+            self.source[self.current_lexeme_start + 1..self.current - 1].to_string(),
         ));
     }
     fn consume_if_match_number(&mut self) -> TokenType {
@@ -225,14 +225,18 @@ impl Scanner<'_> {
             self.advance();
         }
 
-        TokenType::Number(self.source[self.start..self.current].parse().unwrap())
+        TokenType::Number(
+            self.source[self.current_lexeme_start..self.current]
+                .parse()
+                .unwrap(),
+        )
     }
     fn consume_if_match_identifier(&mut self) -> TokenType {
         while self.peek_one().is_some_and(is_alphanumeric) {
             self.advance();
         }
 
-        let lexeme = self.source[self.start..self.current].to_string();
+        let lexeme = self.source[self.current_lexeme_start..self.current].to_string();
 
         match match_keyword(&lexeme) {
             Some(keyword_token) => keyword_token,
