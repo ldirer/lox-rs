@@ -86,6 +86,10 @@ fn scanner_error(err: ScanningError) {
             line,
             string_start: _,
         } => report(line, "", &format!("{err}")),
+        ScanningError::UnterminatedBlockComment {
+            line,
+            comment_start: _,
+        } => report(line, "", &format!("{err}")),
     }
 }
 

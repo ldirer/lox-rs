@@ -29,6 +29,8 @@ pub enum ScanningError {
     UnexpectedCharacter { line: usize, character: char },
     #[error("Unterminated string {string_start:?}")]
     UnterminatedString { line: usize, string_start: String },
+    #[error("Unterminated block comment {comment_start:?}")]
+    UnterminatedBlockComment { line: usize, comment_start: String },
 }
 
 impl Scanner<'_> {
@@ -89,7 +91,10 @@ impl Scanner<'_> {
                 false => Some(TokenType::Greater),
             },
             '/' => {
-                if self.match_one('/') {
+                if self.match_one('*') {
+                    self.consume_if_match_block_comment()?;
+                    None
+                } else if self.match_one('/') {
                     while self.peek_one() != Some(&'\n') && self.peek_one() != None {
                         self.advance();
                     }
@@ -243,6 +248,27 @@ impl Scanner<'_> {
             _ => TokenType::Identifier(lexeme),
         }
     }
+    fn consume_if_match_block_comment(&mut self) -> Result<(), ScanningError> {
+        while self.peek_one() != Some(&'*') || self.peek_two() != Some('/') {
+            if self.peek_one() == Some(&'\n') {
+                self.line += 1;
+            }
+            self.advance();
+        }
+
+        if self.peek_one().is_none() {
+            return Err(ScanningError::UnterminatedBlockComment {
+                line: self.line,
+                comment_start: self.source[self.current_lexeme_start..self.current].to_string(),
+            });
+        }
+
+        // consume '*' and '/'
+        self.advance();
+        self.advance();
+
+        Ok(())
+    }
 }
 
 fn match_keyword(input: &str) -> Option<TokenType> {
@@ -360,6 +386,22 @@ mod tests {
             }
         );
     }
+    #[test]
+    fn test_string_multiple_lines() {
+        let s = "var a = \"a string \n with newlines in it\"".to_string();
+        println!("{}", s);
+        let tokens = tokenize(s, |err| panic!("{err:?}"));
+        println!("{:#?}", tokens);
+        assert_eq!(tokens.len(), 5);
+        assert_eq!(
+            tokens[3],
+            Token {
+                r#type: TokenType::String("a string \n with newlines in it".to_string()),
+                lexeme: "\"a string \n with newlines in it\"".to_string(),
+                line: 2,
+            }
+        );
+    }
 
     #[test]
     fn test_scanner_handles_numbers() {
@@ -417,5 +459,22 @@ mod tests {
         // since we don't parse comments and only alphanumeric characters are allowed in Lox code,
         // we're really just checking we don't crash :)
         assert_eq!(tokens.len(), 1);
+    }
+
+    #[test]
+    fn test_block_comments() {
+        let s = "/* here's a block comment \n with newlines in it */".to_string();
+        // println!("{}", s);
+        let tokens = tokenize(s, |err| panic!("{err:?}"));
+        println!("{:#?}", tokens);
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(
+            tokens[0],
+            Token {
+                r#type: TokenType::EOF,
+                lexeme: "".to_string(),
+                line: 2,
+            }
+        );
     }
 }
