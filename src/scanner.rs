@@ -62,34 +62,22 @@ impl Scanner {
             '+' => Some(TokenType::Plus),
             ';' => Some(TokenType::Semicolon),
             '*' => Some(TokenType::Star),
-            '!' => {
-                if self.match_one('=') {
-                    Some(TokenType::BangEqual)
-                } else {
-                    Some(TokenType::Bang)
-                }
-            }
-            '=' => {
-                if self.match_one('=') {
-                    Some(TokenType::EqualEqual)
-                } else {
-                    Some(TokenType::Equal)
-                }
-            }
-            '<' => {
-                if self.match_one('=') {
-                    Some(TokenType::LessEqual)
-                } else {
-                    Some(TokenType::Less)
-                }
-            }
-            '>' => {
-                if self.match_one('=') {
-                    Some(TokenType::GreaterEqual)
-                } else {
-                    Some(TokenType::Greater)
-                }
-            }
+            '!' => match self.match_one('=') {
+                true => Some(TokenType::BangEqual),
+                false => Some(TokenType::Bang),
+            },
+            '=' => match self.match_one('=') {
+                true => Some(TokenType::EqualEqual),
+                false => Some(TokenType::Equal),
+            },
+            '<' => match self.match_one('=') {
+                true => Some(TokenType::LessEqual),
+                false => Some(TokenType::Less),
+            },
+            '>' => match self.match_one('=') {
+                true => Some(TokenType::GreaterEqual),
+                false => Some(TokenType::Greater),
+            },
             '/' => {
                 if self.match_one('/') {
                     while self.peek_one() != Some('\n') && self.peek_one() != None {
@@ -106,8 +94,8 @@ impl Scanner {
                 None
             }
             '"' => Some(self.consume_if_match_string()?),
-            '0'..='9' => Some(self.consume_if_match_number()),
-            'a'..='z' | 'A'..='Z' | '_' => Some(self.consume_if_match_identifier()),
+            c if is_digit(c) => Some(self.consume_if_match_number()),
+            c if is_alphanumeric(c) => Some(self.consume_if_match_identifier()),
             _ => {
                 self.start = self.current;
                 return Err(ScanningError::UnexpectedCharacter {
@@ -225,10 +213,11 @@ impl Scanner {
         }
 
         let lexeme = self.source[self.start..self.current].to_string();
-        if let Some(keyword_token) = match_keyword(&lexeme) {
-            return keyword_token;
+
+        match match_keyword(&lexeme) {
+            Some(keyword_token) => keyword_token,
+            _ => TokenType::Identifier(lexeme),
         }
-        TokenType::Identifier(lexeme)
     }
 }
 
