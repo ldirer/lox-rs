@@ -9,6 +9,7 @@ use thiserror::Error;
 
 use crate::scanner::{tokenize, ScanningError};
 
+mod ast;
 mod parser;
 mod scanner;
 mod token;
