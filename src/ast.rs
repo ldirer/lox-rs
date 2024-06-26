@@ -1,5 +1,4 @@
-use crate::token::Token;
-use std::fmt::{format, Display, Formatter};
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, PartialEq)]
 pub enum Expr {
@@ -144,12 +143,10 @@ pub fn format_reverse_polish_notation(expr: &Expr) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::Expr::Binary;
-    use crate::ast::Literal::Number;
     use crate::ast::{
-        format_lisp_like, format_reverse_polish_notation, BinaryOperator, Expr, UnaryOperator,
+        BinaryOperator, Expr, format_lisp_like, format_reverse_polish_notation, UnaryOperator,
     };
-    use crate::token::{Token, TokenType};
+    use crate::ast::Literal::Number;
 
     fn get_test_expr() -> Expr {
         // Expression used in the chapter 5 of the book: -123 * (45.67)

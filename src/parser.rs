@@ -1,7 +1,9 @@
+use std::iter::Peekable;
+
+use thiserror::Error;
+
 use crate::ast::{BinaryOperator, Expr, Literal, UnaryOperator};
 use crate::token::{Token, TokenType};
-use std::iter::Peekable;
-use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
 enum ParserError {
@@ -12,7 +14,6 @@ enum ParserError {
 }
 struct Parser<T: Iterator<Item = Token>> {
     tokens: Peekable<T>,
-    current: usize,
     previous: Option<Token>,
 }
 
@@ -29,7 +30,6 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         let tokens = tokens.peekable();
         Parser {
             tokens,
-            current: 0,
             previous: None,
         }
     }
@@ -220,9 +220,6 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         }
     }
 
-    fn peek(&mut self) -> Option<&Token> {
-        self.tokens.peek()
-    }
     fn advance(&mut self) -> Option<Token> {
         let token = self.tokens.next();
         self.previous = token.clone();
@@ -247,7 +244,6 @@ fn token_to_binary(token: Token) -> BinaryOperator {
         TokenType::Minus => BinaryOperator::Minus,
         TokenType::Star => BinaryOperator::Multiply,
         TokenType::Slash => BinaryOperator::Divide,
-
         TokenType::EqualEqual => BinaryOperator::Eq,
         TokenType::BangEqual => BinaryOperator::Neq,
         TokenType::Greater => BinaryOperator::Gt,
