@@ -61,18 +61,30 @@ fn interpret_binary(
         (LNumber(left), Minus, LNumber(right)) => Ok(LNumber(left - right)),
         (LNumber(left), Multiply, LNumber(right)) => Ok(LNumber(left * right)),
         (LNumber(left), Divide, LNumber(right)) => Ok(LNumber(left / right)),
-        (LNumber(left), Eq, LNumber(right)) => Ok(LBool(left == right)),
-        (LNumber(left), Neq, LNumber(right)) => Ok(LBool(left != right)),
         (LNumber(left), Gt, LNumber(right)) => Ok(LBool(left > right)),
         (LNumber(left), Gte, LNumber(right)) => Ok(LBool(left >= right)),
         (LNumber(left), Lt, LNumber(right)) => Ok(LBool(left < right)),
         (LNumber(left), Lte, LNumber(right)) => Ok(LBool(left <= right)),
         (LString(left), Plus, LString(right)) => Ok(LString(format!("{left}{right}"))),
+
+        (lox_left, Eq, lox_right) => Ok(LBool(is_equal(lox_left, lox_right))),
+        (lox_left, Neq, lox_right) => Ok(LBool(!is_equal(lox_left, lox_right))),
+
         (a, _, b) => Err(InterpreterError::BinaryOperationNotSupported {
             operator: *op,
             left: a,
             right: b,
         }),
+    }
+}
+
+fn is_equal(left: LoxValue, right: LoxValue) -> bool {
+    match (left, right) {
+        (LNil, LNil) => true,
+        (LBool(l), LBool(r)) => l == r,
+        (LNumber(l), LNumber(r)) => l == r,
+        (LString(l), LString(r)) => l == r,
+        (_, _) => false,
     }
 }
 
@@ -147,6 +159,23 @@ mod tests {
             ("!nil", LoxValue::LBool(true)),
             ("!!nil", LoxValue::LBool(false)),
             ("!\"abc\"", LoxValue::LBool(false)),
+        ];
+        input_and_expected.into_iter().for_each(|(code, expected)| {
+            dbg!(code, &expected);
+            assert_eq!(get_lox_value(code), expected)
+        })
+    }
+
+    #[test]
+    fn test_comparison() {
+        let input_and_expected: Vec<(&str, LoxValue)> = vec![
+            ("true == true", LoxValue::LBool(true)),
+            ("true == \"ok\"", LoxValue::LBool(false)),
+            ("3 != \"ok\"", LoxValue::LBool(true)),
+            ("nil == false", LoxValue::LBool(false)),
+            ("nil == nil", LoxValue::LBool(true)),
+            ("3 == 3.", LoxValue::LBool(true)),
+            ("3 == 4.", LoxValue::LBool(false)),
         ];
         input_and_expected.into_iter().for_each(|(code, expected)| {
             dbg!(code, &expected);
