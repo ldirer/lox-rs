@@ -14,7 +14,7 @@ pub enum Expr {
     },
     Grouping(Box<Expr>),
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum UnaryOperator {
     Minus,
     Not,
@@ -28,7 +28,7 @@ impl Display for UnaryOperator {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum BinaryOperator {
     Plus,
     Minus,
@@ -143,10 +143,10 @@ pub fn format_reverse_polish_notation(expr: &Expr) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{
-        BinaryOperator, Expr, format_lisp_like, format_reverse_polish_notation, UnaryOperator,
-    };
     use crate::ast::Literal::Number;
+    use crate::ast::{
+        format_lisp_like, format_reverse_polish_notation, BinaryOperator, Expr, UnaryOperator,
+    };
 
     fn get_test_expr() -> Expr {
         // Expression used in the chapter 5 of the book: -123 * (45.67)

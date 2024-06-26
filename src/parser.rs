@@ -6,7 +6,7 @@ use crate::ast::{BinaryOperator, Expr, Literal, UnaryOperator};
 use crate::token::{Token, TokenType};
 
 #[derive(Debug, Error, PartialEq)]
-enum ParserError {
+pub enum ParserError {
     #[error("line: {line}. Expected ')' after expression.")]
     UnmatchedParenthesis { line: usize },
     #[error("line: {line}. Unexpected token {lexeme}.")]
@@ -16,7 +16,7 @@ struct Parser<T: Iterator<Item = Token>> {
     tokens: Peekable<T>,
 }
 
-fn parse<T>(tokens: T) -> Result<Expr, ParserError>
+pub fn parse<T>(tokens: T) -> Result<Expr, ParserError>
 where
     T: Iterator<Item = Token>,
 {
