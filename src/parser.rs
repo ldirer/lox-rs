@@ -14,7 +14,6 @@ enum ParserError {
 }
 struct Parser<T: Iterator<Item = Token>> {
     tokens: Peekable<T>,
-    previous: Option<Token>,
 }
 
 fn parse<T>(tokens: T) -> Result<Expr, ParserError>
@@ -28,10 +27,7 @@ where
 impl<T: Iterator<Item = Token>> Parser<T> {
     fn new(tokens: T) -> Self {
         let tokens = tokens.peekable();
-        Parser {
-            tokens,
-            previous: None,
-        }
+        Parser { tokens }
     }
 
     /// parsing functions encode grammar rules. This code should be read with the grammar.
@@ -41,8 +37,9 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
     fn parse_equality(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.parse_comparison()?;
-        while self.match_current(&vec![TokenType::BangEqual, TokenType::EqualEqual]) {
-            let token = self.previous();
+        while let Some(token) =
+            self.match_current(&vec![TokenType::BangEqual, TokenType::EqualEqual])
+        {
             let operator = token_to_binary(token);
             let right = self.parse_comparison()?;
             expr = Expr::Binary {
@@ -57,13 +54,12 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
     fn parse_comparison(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.parse_term()?;
-        while self.match_current(&vec![
+        while let Some(token) = self.match_current(&vec![
             TokenType::Greater,
             TokenType::GreaterEqual,
             TokenType::Less,
             TokenType::LessEqual,
         ]) {
-            let token = self.previous();
             let operator = token_to_binary(token);
             let right = self.parse_term()?;
             expr = Expr::Binary {
@@ -77,8 +73,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
     fn parse_term(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.parse_factor()?;
-        while self.match_current(&vec![TokenType::Plus, TokenType::Minus]) {
-            let token = self.previous();
+        while let Some(token) = self.match_current(&vec![TokenType::Plus, TokenType::Minus]) {
             let operator = token_to_binary(token);
             let right = self.parse_factor()?;
             expr = Expr::Binary {
@@ -91,8 +86,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
     fn parse_factor(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.parse_unary()?;
-        while self.match_current(&vec![TokenType::Slash, TokenType::Star]) {
-            let token = self.previous();
+        while let Some(token) = self.match_current(&vec![TokenType::Slash, TokenType::Star]) {
             let operator = token_to_binary(token);
             let right = self.parse_unary()?;
             expr = Expr::Binary {
@@ -105,8 +99,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     fn parse_unary(&mut self) -> Result<Expr, ParserError> {
-        while self.match_current(&vec![TokenType::Bang, TokenType::Minus]) {
-            let token = self.previous();
+        while let Some(token) = self.match_current(&vec![TokenType::Bang, TokenType::Minus]) {
             let operator = token_to_unary(token);
             let operand = self.parse_unary()?;
             return Ok(Expr::Unary {
@@ -132,7 +125,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             TokenType::String(value) => Ok(Expr::Literal(Literal::String(value))),
             TokenType::LeftParen => {
                 let expr = self.parse_expression()?;
-                match self.consume(TokenType::RightParen) {
+                match self.match_current(&vec![TokenType::RightParen]) {
                     None => Err(ParserError::UnmatchedParenthesis { line: token.line }),
                     Some(_) => Ok(Expr::Grouping(Box::new(expr))),
                 }
@@ -149,30 +142,18 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     /// a better api for this might be to return an Option<Token>
-    fn match_current(&mut self, token_types: &Vec<TokenType>) -> bool {
+    fn match_current(&mut self, token_types: &Vec<TokenType>) -> Option<Token> {
         for token_type in token_types {
             let matched = self.tokens.next_if(|t| t.r#type == *token_type);
-            if let Some(token) = matched {
-                self.previous = Some(token);
-                return true;
+            if matched.is_some() {
+                return matched;
             }
         }
-        false
-    }
-    fn previous(&mut self) -> Token {
-        // TODO unwrap. Any way around it?
-        self.previous.clone().unwrap()
-    }
-
-    fn consume(&mut self, token_type: TokenType) -> Option<Token> {
-        let matched = self.tokens.next_if(|t| t.r#type == token_type);
-        self.previous = matched.clone();
-        matched
+        None
     }
 
     fn advance(&mut self) -> Option<Token> {
         let token = self.tokens.next();
-        self.previous = token.clone();
         token
     }
 
@@ -272,10 +253,10 @@ mod tests {
         }];
         let mut parser = Parser::new(tokens.into_iter());
         let matched = parser.match_current(&vec![TokenType::Plus]);
-        assert!(matched);
+        assert!(matched.is_some());
         // cursor should have moved
         let matched_again = parser.match_current(&vec![TokenType::Plus]);
-        assert!(!matched_again);
+        assert!(matched_again.is_none());
     }
 
     #[test]
