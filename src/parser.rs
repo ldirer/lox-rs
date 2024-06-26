@@ -194,7 +194,10 @@ fn token_to_binary(token: Token) -> BinaryOperator {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{BinaryOperator, Expr, Literal, UnaryOperator};
+    use crate::ast::{
+        format_lisp_like, format_reverse_polish_notation, BinaryOperator, Expr, Literal,
+        UnaryOperator,
+    };
     use crate::parser::{parse, Parser};
     use crate::scanner::tokenize;
     use crate::token::{Token, TokenType};
@@ -239,6 +242,21 @@ mod tests {
                 operator: UnaryOperator::Minus,
                 expression: Box::new(Expr::Literal(Literal::Number(2.)))
             }
+        )
+    }
+
+    #[test]
+    fn test_precedence_1() {
+        let tokens = tokenize("3 + 2 * (-2 + 3) == 5".to_string(), |error| {
+            panic!("{}", error)
+        });
+        let expr = parse(tokens.into_iter()).unwrap();
+
+        // I'd use RPN but I don't understand it :)
+        // "3 2 2 - 3 + * + 5 =="
+        assert_eq!(
+            format_lisp_like(&expr),
+            "(== (+ 3 (* 2 (group (+ (- 2) 3)))) 5)"
         )
     }
 }

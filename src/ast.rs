@@ -80,7 +80,7 @@ impl Display for Literal {
     }
 }
 
-fn format_lisp_like(expr: &Expr) -> String {
+pub fn format_lisp_like(expr: &Expr) -> String {
     match expr {
         Expr::Literal(ref literal) => {
             format!("{}", literal)
@@ -109,7 +109,7 @@ fn format_lisp_like(expr: &Expr) -> String {
     }
 }
 
-fn format_reverse_polish_notation(expr: &Expr) -> String {
+pub fn format_reverse_polish_notation(expr: &Expr) -> String {
     match expr {
         Expr::Literal(ref lit) => {
             format!("{}", lit)
