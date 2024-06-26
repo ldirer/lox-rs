@@ -20,7 +20,7 @@ enum InterpreterError {
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 enum LoxValue {
     LString(String),
     LNumber(f64),
@@ -79,11 +79,19 @@ fn interpret_binary(
 fn interpret_unary(op: &UnaryOperator, operand: LoxValue) -> Result<LoxValue, InterpreterError> {
     match (op, operand) {
         (UnaryOperator::Minus, LNumber(num)) => Ok(LNumber(-num)),
-        (UnaryOperator::Not, LBool(b)) => Ok(LBool(!b)),
+        (UnaryOperator::Not, lox_value) => Ok(LBool(!truthy(lox_value))),
         (_, operand) => Err(InterpreterError::UnaryOperationNotSupported {
             operator: *op,
             operand,
         }),
+    }
+}
+
+fn truthy(v: LoxValue) -> bool {
+    match v {
+        LNil => false,
+        LBool(value) => value,
+        _ => true,
     }
 }
 
@@ -129,6 +137,23 @@ mod tests {
         let lox_value = get_lox_value("3 * -1");
         assert_eq!(lox_value, LoxValue::LNumber(-3.0))
     }
+
+    #[test]
+    fn test_unary_not() {
+        let input_and_expected: Vec<(&str, LoxValue)> = vec![
+            ("!true", LoxValue::LBool(false)),
+            ("!false", LoxValue::LBool(true)),
+            ("!4", LoxValue::LBool(false)),
+            ("!nil", LoxValue::LBool(true)),
+            ("!!nil", LoxValue::LBool(false)),
+            ("!\"abc\"", LoxValue::LBool(false)),
+        ];
+        input_and_expected.into_iter().for_each(|(code, expected)| {
+            dbg!(code, &expected);
+            assert_eq!(get_lox_value(code), expected)
+        })
+    }
+
     #[test]
     fn test_interpret_expression_groups() {
         let lox_value = get_lox_value("(1 + 2) * (4 - 2)");
