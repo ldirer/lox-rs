@@ -132,9 +132,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     fn primary(&mut self) -> Result<Expr, ParserError> {
-        // TODO not great to hand-manage next and previous here I think
-        let token = self.tokens.next();
-        self.previous = token.clone();
+        let token = self.advance();
 
         if token.is_none() {
             panic!("unfinished business?")
@@ -170,8 +168,65 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         matched
     }
 
+    /// 'synchronize' in the book. Not used yet.
+    /// The idea is that when there's an error, we don't want to show many 'cascading errors'.
+    /// So we use 'anchor points' in tokens where it's likely we are back to a clean state.
+    fn recover(&mut self) {
+        while let Some(token) = self.advance() {
+            // I think there's something nice about having an explicit match statement here: if we
+            // make additions to the language, it lets us know we need to consider what we want to
+            // do with the new token type here.
+            match token.r#type {
+                TokenType::Semicolon => return,
+                TokenType::Class => return,
+                TokenType::Fun => return,
+                TokenType::For => return,
+                TokenType::If => return,
+                TokenType::Print => return,
+                TokenType::Return => return,
+                TokenType::Var => return,
+                TokenType::While => return,
+                TokenType::LeftParen => {}
+                TokenType::RightParen => {}
+                TokenType::LeftBrace => {}
+                TokenType::RightBrace => {}
+                TokenType::Comma => {}
+                TokenType::Dot => {}
+                TokenType::Minus => {}
+                TokenType::Plus => {}
+                TokenType::Slash => {}
+                TokenType::Star => {}
+                TokenType::Bang => {}
+                TokenType::BangEqual => {}
+                TokenType::Equal => {}
+                TokenType::EqualEqual => {}
+                TokenType::Greater => {}
+                TokenType::GreaterEqual => {}
+                TokenType::Less => {}
+                TokenType::LessEqual => {}
+                TokenType::And => {}
+                TokenType::Else => {}
+                TokenType::False => {}
+                TokenType::Nil => {}
+                TokenType::Or => {}
+                TokenType::Super => {}
+                TokenType::This => {}
+                TokenType::True => {}
+                TokenType::Identifier(_) => {}
+                TokenType::String(_) => {}
+                TokenType::Number(_) => {}
+                TokenType::EOF => {}
+            }
+        }
+    }
+
     fn peek(&mut self) -> Option<&Token> {
         self.tokens.peek()
+    }
+    fn advance(&mut self) -> Option<Token> {
+        let token = self.tokens.next();
+        self.previous = token.clone();
+        token
     }
 }
 
