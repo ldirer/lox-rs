@@ -1,4 +1,4 @@
-use crate::ast::Expr;
+use crate::ast::{BinaryOperator, Expr, Literal, UnaryOperator};
 use crate::token::{Token, TokenType};
 use std::iter::Peekable;
 use thiserror::Error;
@@ -35,7 +35,8 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     fn equality(&mut self) -> Expr {
         let mut expr = self.comparison();
         while self.match_current(&vec![TokenType::BangEqual, TokenType::EqualEqual]) {
-            let operator: Token = self.previous();
+            let token = self.previous();
+            let operator = token_to_binary(token);
             let right = self.comparison();
             expr = Expr::Binary {
                 operator,
@@ -71,7 +72,8 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             TokenType::Less,
             TokenType::LessEqual,
         ]) {
-            let operator: Token = self.previous();
+            let token = self.previous();
+            let operator = token_to_binary(token);
             let right = self.term();
             expr = Expr::Binary {
                 operator,
@@ -85,7 +87,8 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     fn term(&mut self) -> Expr {
         let mut expr = self.factor();
         while self.match_current(&vec![TokenType::Plus, TokenType::Minus]) {
-            let operator: Token = self.previous();
+            let token = self.previous();
+            let operator = token_to_binary(token);
             let right = self.factor();
             expr = Expr::Binary {
                 operator,
@@ -98,7 +101,8 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     fn factor(&mut self) -> Expr {
         let mut expr = self.unary();
         while self.match_current(&vec![TokenType::Slash, TokenType::Star]) {
-            let operator: Token = self.previous();
+            let token = self.previous();
+            let operator = token_to_binary(token);
             let right = self.unary();
             expr = Expr::Binary {
                 operator,
@@ -111,7 +115,8 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
     fn unary(&mut self) -> Expr {
         while self.match_current(&vec![TokenType::Bang, TokenType::Minus]) {
-            let operator: Token = self.previous();
+            let token = self.previous();
+            let operator = token_to_unary(token);
             let operand = self.unary();
             return Expr::Unary {
                 operator,
@@ -130,22 +135,13 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             panic!("unfinished business?")
         }
         let token = token.unwrap();
-        match token {
-            // deviating from the book: I'm storing a token in Expr::Literal. the book uses a value (false, true, null...) and discards the rest of the token information.
-            // I guess that makes sense... But that's not what we do with other expressions? I don't know, will see later maybe.
-            Token {
-                r#type:
-                    TokenType::False
-                    | TokenType::True
-                    | TokenType::Nil
-                    | TokenType::Number(_)
-                    | TokenType::String(_),
-                ..
-            } => Expr::Literal(token.clone()),
-            Token {
-                r#type: TokenType::LeftParen,
-                ..
-            } => {
+        match token.r#type {
+            TokenType::False => Expr::Literal(Literal::False),
+            TokenType::True => Expr::Literal(Literal::True),
+            TokenType::Nil => Expr::Literal(Literal::Nil),
+            TokenType::Number(value) => Expr::Literal(Literal::Number(value)),
+            TokenType::String(value) => Expr::Literal(Literal::String(value)),
+            TokenType::LeftParen => {
                 let expr = self.expression();
                 self.consume(TokenType::RightParen)
                     .expect("Expect ')' after expression.");
@@ -168,9 +164,37 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 }
 
+// TODO these conversion functions are okay... But not great.
+// 1. we panic.
+// 2. Nothing tells us if we forgot one operator. Ideally I'd like to know that all UnaryOperators/BinaryOperators can be produced by these functions.
+fn token_to_unary(token: Token) -> UnaryOperator {
+    match token.r#type {
+        TokenType::Minus => UnaryOperator::Minus,
+        TokenType::Bang => UnaryOperator::Not,
+        _ => panic!("unable to parse token into unary operator: {:?}", token),
+    }
+}
+
+fn token_to_binary(token: Token) -> BinaryOperator {
+    match token.r#type {
+        TokenType::Plus => BinaryOperator::Plus,
+        TokenType::Minus => BinaryOperator::Minus,
+        TokenType::Star => BinaryOperator::Multiply,
+        TokenType::Slash => BinaryOperator::Divide,
+
+        TokenType::EqualEqual => BinaryOperator::Eq,
+        TokenType::BangEqual => BinaryOperator::Neq,
+        TokenType::Greater => BinaryOperator::Gt,
+        TokenType::GreaterEqual => BinaryOperator::Gte,
+        TokenType::Less => BinaryOperator::Lt,
+        TokenType::LessEqual => BinaryOperator::Lte,
+        _ => panic!("unable to parse token into binary operator: {:?}", token),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::ast::Expr;
+    use crate::ast::{BinaryOperator, Expr, Literal, UnaryOperator};
     use crate::parser::{parse, Parser};
     use crate::scanner::tokenize;
     use crate::token::{Token, TokenType};
@@ -198,21 +222,9 @@ mod tests {
         assert_eq!(
             expr,
             Expr::Binary {
-                operator: Token {
-                    r#type: TokenType::Plus,
-                    lexeme: "+".to_string(),
-                    line: 1,
-                },
-                left: Box::new(Expr::Literal(Token {
-                    r#type: TokenType::Number(1.),
-                    lexeme: "1".to_string(),
-                    line: 1,
-                })),
-                right: Box::new(Expr::Literal(Token {
-                    r#type: TokenType::Number(2.),
-                    lexeme: "2".to_string(),
-                    line: 1,
-                }))
+                operator: BinaryOperator::Plus,
+                left: Box::new(Expr::Literal(Literal::Number(1.),)),
+                right: Box::new(Expr::Literal(Literal::Number(2.),))
             }
         )
     }
@@ -220,21 +232,12 @@ mod tests {
     #[test]
     fn test_unary_simple() {
         let tokens = tokenize("-2".to_string(), |error| panic!("{}", error));
-        // println!("tokens: {tokens:#?}");
         let expr = parse(tokens.into_iter()).unwrap();
         assert_eq!(
             expr,
             Expr::Unary {
-                operator: Token {
-                    r#type: TokenType::Minus,
-                    lexeme: "-".to_string(),
-                    line: 1,
-                },
-                expression: Box::new(Expr::Literal(Token {
-                    r#type: TokenType::Number(2.),
-                    lexeme: "2".to_string(),
-                    line: 1,
-                })),
+                operator: UnaryOperator::Minus,
+                expression: Box::new(Expr::Literal(Literal::Number(2.)))
             }
         )
     }

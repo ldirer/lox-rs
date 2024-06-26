@@ -1,30 +1,95 @@
 use crate::token::Token;
+use std::fmt::{format, Display, Formatter};
 
 #[derive(Debug, PartialEq)]
 pub enum Expr {
-    Literal(Token),
+    Literal(Literal),
     Unary {
-        operator: Token,
+        operator: UnaryOperator,
         expression: Box<Expr>,
     },
     Binary {
-        operator: Token,
+        operator: BinaryOperator,
         left: Box<Expr>,
         right: Box<Expr>,
     },
     Grouping(Box<Expr>),
 }
+#[derive(Debug, PartialEq)]
+pub enum UnaryOperator {
+    Minus,
+    Not,
+}
+impl Display for UnaryOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnaryOperator::Minus => write!(f, "-"),
+            UnaryOperator::Not => write!(f, "!"),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum BinaryOperator {
+    Plus,
+    Minus,
+    Multiply,
+    Divide,
+    Eq,
+    Neq,
+    Gt,
+    Gte,
+    Lt,
+    Lte,
+}
+
+impl Display for BinaryOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BinaryOperator::Plus => write!(f, "+"),
+            BinaryOperator::Minus => write!(f, "-"),
+            BinaryOperator::Multiply => write!(f, "*"),
+            BinaryOperator::Divide => write!(f, "/"),
+            BinaryOperator::Eq => write!(f, "=="),
+            BinaryOperator::Neq => write!(f, "!="),
+            BinaryOperator::Gt => write!(f, ">"),
+            BinaryOperator::Gte => write!(f, ">="),
+            BinaryOperator::Lt => write!(f, "<"),
+            BinaryOperator::Lte => write!(f, "<="),
+        }
+    }
+}
+#[derive(Debug, PartialEq)]
+pub enum Literal {
+    Number(f64),
+    String(String),
+    True,
+    False,
+    Nil,
+}
+
+impl Display for Literal {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Literal::Number(n) => write!(f, "{n}"),
+            Literal::String(s) => write!(f, "{s}"),
+            Literal::True => write!(f, "true"),
+            Literal::False => write!(f, "false"),
+            Literal::Nil => write!(f, "nil"),
+        }
+    }
+}
 
 fn format_lisp_like(expr: &Expr) -> String {
     match expr {
-        Expr::Literal(ref token) => {
-            format!("{}", token.lexeme)
+        Expr::Literal(ref literal) => {
+            format!("{}", literal)
         }
         Expr::Unary {
             expression,
             ref operator,
         } => {
-            format!("({} {})", operator.lexeme, format_lisp_like(expression))
+            format!("({} {})", operator, format_lisp_like(expression))
         }
         Expr::Binary {
             operator,
@@ -33,7 +98,7 @@ fn format_lisp_like(expr: &Expr) -> String {
         } => {
             format!(
                 "({} {} {})",
-                operator.lexeme,
+                operator,
                 format_lisp_like(left),
                 format_lisp_like(right)
             )
@@ -46,8 +111,8 @@ fn format_lisp_like(expr: &Expr) -> String {
 
 fn format_reverse_polish_notation(expr: &Expr) -> String {
     match expr {
-        Expr::Literal(ref token) => {
-            format!("{}", token.lexeme)
+        Expr::Literal(ref lit) => {
+            format!("{}", lit)
         }
         Expr::Unary {
             expression,
@@ -56,7 +121,7 @@ fn format_reverse_polish_notation(expr: &Expr) -> String {
             format!(
                 "{} {}",
                 format_reverse_polish_notation(expression),
-                operator.lexeme,
+                operator,
             )
         }
         Expr::Binary {
@@ -68,7 +133,7 @@ fn format_reverse_polish_notation(expr: &Expr) -> String {
                 "{} {} {}",
                 format_reverse_polish_notation(left),
                 format_reverse_polish_notation(right),
-                operator.lexeme,
+                operator,
             )
         }
         Expr::Grouping(expr) => {
@@ -79,7 +144,11 @@ fn format_reverse_polish_notation(expr: &Expr) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{format_lisp_like, format_reverse_polish_notation, Expr};
+    use crate::ast::Expr::Binary;
+    use crate::ast::Literal::Number;
+    use crate::ast::{
+        format_lisp_like, format_reverse_polish_notation, BinaryOperator, Expr, UnaryOperator,
+    };
     use crate::token::{Token, TokenType};
 
     fn get_test_expr() -> Expr {
@@ -87,73 +156,29 @@ mod tests {
         // let tokens = tokenize("-123 * (45.67)".to_string(), |err| panic!("{}", err));
         // println!("{tokens:#?}");
         Expr::Binary {
-            operator: Token {
-                r#type: TokenType::Star,
-                lexeme: "*".to_string(),
-                line: 1,
-            },
+            operator: BinaryOperator::Multiply,
             left: Box::new(Expr::Unary {
-                expression: Box::new(Expr::Literal(Token {
-                    r#type: TokenType::Number(123.0),
-                    lexeme: "123".to_string(),
-                    line: 1,
-                })),
-                operator: Token {
-                    r#type: TokenType::Minus,
-                    lexeme: "-".to_string(),
-                    line: 1,
-                },
+                expression: Box::new(Expr::Literal(Number(123.0))),
+                operator: UnaryOperator::Minus,
             }),
-            right: Box::new(Expr::Grouping(Box::new(Expr::Literal(Token {
-                r#type: TokenType::Number(45.67),
-                lexeme: "45.67".to_string(),
-                line: 1,
-            })))),
+            right: Box::new(Expr::Grouping(Box::new(Expr::Literal(Number(45.67))))),
         }
     }
 
-    fn build_binary(operator: Token, a: f64, b: f64) -> Expr {
+    fn build_binary(operator: BinaryOperator, a: f64, b: f64) -> Expr {
         return Expr::Binary {
             operator,
-            left: Box::new(Expr::Literal(Token {
-                r#type: TokenType::Number(a),
-                lexeme: a.to_string(),
-                line: 1,
-            })),
-            right: Box::new(Expr::Literal(Token {
-                r#type: TokenType::Number(b),
-                lexeme: b.to_string(),
-                line: 1,
-            })),
+            left: Box::new(Expr::Literal(Number(a))),
+            right: Box::new(Expr::Literal(Number(b))),
         };
     }
 
     /// tedious to write fixtures like this...
     fn get_test_expr_reverse_polish_notation() -> Expr {
-        let left = build_binary(
-            Token {
-                r#type: TokenType::Plus,
-                lexeme: "+".to_string(),
-                line: 1,
-            },
-            1.,
-            2.,
-        );
-        let right = build_binary(
-            Token {
-                r#type: TokenType::Minus,
-                lexeme: "-".to_string(),
-                line: 1,
-            },
-            4.,
-            3.,
-        );
+        let left = build_binary(BinaryOperator::Plus, 1., 2.);
+        let right = build_binary(BinaryOperator::Minus, 4., 3.);
         return Expr::Binary {
-            operator: Token {
-                r#type: TokenType::Star,
-                lexeme: "*".to_string(),
-                line: 1,
-            },
+            operator: BinaryOperator::Multiply,
             left: Box::new(Expr::Grouping(Box::new(left))),
             right: Box::new(Expr::Grouping(Box::new(right))),
         };
