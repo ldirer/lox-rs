@@ -3,8 +3,13 @@ use crate::token::{Token, TokenType};
 use std::iter::Peekable;
 use thiserror::Error;
 
-#[derive(Debug, Error)]
-enum ParserError {}
+#[derive(Debug, Error, PartialEq)]
+enum ParserError {
+    #[error("line: {line}. Expected ')' after expression.")]
+    UnmatchedParenthesis { line: usize },
+    #[error("line: {line}. Unexpected token {lexeme}.")]
+    UnexpectedToken { line: usize, lexeme: String },
+}
 struct Parser<T: Iterator<Item = Token>> {
     tokens: Peekable<T>,
     current: usize,
@@ -16,7 +21,7 @@ where
     T: Iterator<Item = Token>,
 {
     let mut parser = Parser::new(tokens);
-    Ok(parser.expression())
+    parser.expression()
 }
 
 impl<T: Iterator<Item = Token>> Parser<T> {
@@ -29,15 +34,15 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         }
     }
 
-    fn expression(&mut self) -> Expr {
+    fn expression(&mut self) -> Result<Expr, ParserError> {
         self.equality()
     }
-    fn equality(&mut self) -> Expr {
-        let mut expr = self.comparison();
+    fn equality(&mut self) -> Result<Expr, ParserError> {
+        let mut expr = self.comparison()?;
         while self.match_current(&vec![TokenType::BangEqual, TokenType::EqualEqual]) {
             let token = self.previous();
             let operator = token_to_binary(token);
-            let right = self.comparison();
+            let right = self.comparison()?;
             expr = Expr::Binary {
                 operator,
                 left: Box::new(expr),
@@ -45,7 +50,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             };
         }
 
-        return expr;
+        return Ok(expr);
     }
 
     /// a better api for this might be to return an Option<Token>
@@ -64,8 +69,8 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         self.previous.clone().unwrap()
     }
 
-    fn comparison(&mut self) -> Expr {
-        let mut expr = self.term();
+    fn comparison(&mut self) -> Result<Expr, ParserError> {
+        let mut expr = self.term()?;
         while self.match_current(&vec![
             TokenType::Greater,
             TokenType::GreaterEqual,
@@ -74,59 +79,59 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         ]) {
             let token = self.previous();
             let operator = token_to_binary(token);
-            let right = self.term();
+            let right = self.term()?;
             expr = Expr::Binary {
                 operator,
                 left: Box::new(expr),
                 right: Box::new(right),
             };
         }
-        expr
+        Ok(expr)
     }
 
-    fn term(&mut self) -> Expr {
-        let mut expr = self.factor();
+    fn term(&mut self) -> Result<Expr, ParserError> {
+        let mut expr = self.factor()?;
         while self.match_current(&vec![TokenType::Plus, TokenType::Minus]) {
             let token = self.previous();
             let operator = token_to_binary(token);
-            let right = self.factor();
+            let right = self.factor()?;
             expr = Expr::Binary {
                 operator,
                 left: Box::new(expr),
                 right: Box::new(right),
             };
         }
-        expr
+        Ok(expr)
     }
-    fn factor(&mut self) -> Expr {
-        let mut expr = self.unary();
+    fn factor(&mut self) -> Result<Expr, ParserError> {
+        let mut expr = self.unary()?;
         while self.match_current(&vec![TokenType::Slash, TokenType::Star]) {
             let token = self.previous();
             let operator = token_to_binary(token);
-            let right = self.unary();
+            let right = self.unary()?;
             expr = Expr::Binary {
                 operator,
                 left: Box::new(expr),
                 right: Box::new(right),
             };
         }
-        expr
+        Ok(expr)
     }
 
-    fn unary(&mut self) -> Expr {
+    fn unary(&mut self) -> Result<Expr, ParserError> {
         while self.match_current(&vec![TokenType::Bang, TokenType::Minus]) {
             let token = self.previous();
             let operator = token_to_unary(token);
-            let operand = self.unary();
-            return Expr::Unary {
+            let operand = self.unary()?;
+            return Ok(Expr::Unary {
                 operator,
                 expression: Box::new(operand),
-            };
+            });
         }
         self.primary()
     }
 
-    fn primary(&mut self) -> Expr {
+    fn primary(&mut self) -> Result<Expr, ParserError> {
         // TODO not great to hand-manage next and previous here I think
         let token = self.tokens.next();
         self.previous = token.clone();
@@ -136,20 +141,26 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         }
         let token = token.unwrap();
         match token.r#type {
-            TokenType::False => Expr::Literal(Literal::False),
-            TokenType::True => Expr::Literal(Literal::True),
-            TokenType::Nil => Expr::Literal(Literal::Nil),
-            TokenType::Number(value) => Expr::Literal(Literal::Number(value)),
-            TokenType::String(value) => Expr::Literal(Literal::String(value)),
+            TokenType::False => Ok(Expr::Literal(Literal::False)),
+            TokenType::True => Ok(Expr::Literal(Literal::True)),
+            TokenType::Nil => Ok(Expr::Literal(Literal::Nil)),
+            TokenType::Number(value) => Ok(Expr::Literal(Literal::Number(value))),
+            TokenType::String(value) => Ok(Expr::Literal(Literal::String(value))),
             TokenType::LeftParen => {
-                let expr = self.expression();
-                self.consume(TokenType::RightParen)
-                    .expect("Expect ')' after expression.");
-                Expr::Grouping(Box::new(expr))
+                let expr = self.expression()?;
+                match self.consume(TokenType::RightParen) {
+                    None => Err(ParserError::UnmatchedParenthesis { line: token.line }),
+                    Some(_) => Ok(Expr::Grouping(Box::new(expr))),
+                }
             }
-            _ => {
-                panic!("unexpected token {token:?}");
-            }
+            _ => Err(ParserError::UnexpectedToken {
+                line: token.line,
+                lexeme: if token.r#type == TokenType::EOF {
+                    "End Of File".to_string()
+                } else {
+                    token.lexeme
+                },
+            }),
         }
     }
 
@@ -194,11 +205,8 @@ fn token_to_binary(token: Token) -> BinaryOperator {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{
-        format_lisp_like, format_reverse_polish_notation, BinaryOperator, Expr, Literal,
-        UnaryOperator,
-    };
-    use crate::parser::{parse, Parser};
+    use crate::ast::{format_lisp_like, BinaryOperator, Expr, Literal, UnaryOperator};
+    use crate::parser::{parse, Parser, ParserError};
     use crate::scanner::tokenize;
     use crate::token::{Token, TokenType};
 
@@ -258,5 +266,28 @@ mod tests {
             format_lisp_like(&expr),
             "(== (+ 3 (* 2 (group (+ (- 2) 3)))) 5)"
         )
+    }
+
+    #[test]
+    fn test_unmatched_parenthesis() {
+        let tokens = tokenize("\n((1 + 2) / 1".to_string(), |error| panic!("{}", error));
+        let expr = parse(tokens.into_iter());
+        assert!(expr.is_err());
+        let err = expr.err().unwrap();
+        assert_eq!(err, ParserError::UnmatchedParenthesis { line: 2 });
+    }
+    #[test]
+    fn test_unfinished_expression() {
+        let tokens = tokenize("1 + ".to_string(), |error| panic!("{}", error));
+        let expr = parse(tokens.into_iter());
+        assert!(expr.is_err());
+        let err = expr.err().unwrap();
+        assert_eq!(
+            err,
+            ParserError::UnexpectedToken {
+                line: 1,
+                lexeme: "End Of File".to_string()
+            }
+        );
     }
 }
