@@ -22,7 +22,7 @@ where
     T: Iterator<Item = Token>,
 {
     let mut parser = Parser::new(tokens);
-    parser.expression()
+    parser.parse_expression()
 }
 
 impl<T: Iterator<Item = Token>> Parser<T> {
@@ -34,15 +34,17 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         }
     }
 
-    fn expression(&mut self) -> Result<Expr, ParserError> {
-        self.equality()
+    /// parsing functions encode grammar rules. This code should be read with the grammar.
+    /// in particular, the grammar used here (from the book) encodes precedence rules.
+    fn parse_expression(&mut self) -> Result<Expr, ParserError> {
+        self.parse_equality()
     }
-    fn equality(&mut self) -> Result<Expr, ParserError> {
-        let mut expr = self.comparison()?;
+    fn parse_equality(&mut self) -> Result<Expr, ParserError> {
+        let mut expr = self.parse_comparison()?;
         while self.match_current(&vec![TokenType::BangEqual, TokenType::EqualEqual]) {
             let token = self.previous();
             let operator = token_to_binary(token);
-            let right = self.comparison()?;
+            let right = self.parse_comparison()?;
             expr = Expr::Binary {
                 operator,
                 left: Box::new(expr),
@@ -51,6 +53,99 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         }
 
         return Ok(expr);
+    }
+
+    fn parse_comparison(&mut self) -> Result<Expr, ParserError> {
+        let mut expr = self.parse_term()?;
+        while self.match_current(&vec![
+            TokenType::Greater,
+            TokenType::GreaterEqual,
+            TokenType::Less,
+            TokenType::LessEqual,
+        ]) {
+            let token = self.previous();
+            let operator = token_to_binary(token);
+            let right = self.parse_term()?;
+            expr = Expr::Binary {
+                operator,
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn parse_term(&mut self) -> Result<Expr, ParserError> {
+        let mut expr = self.parse_factor()?;
+        while self.match_current(&vec![TokenType::Plus, TokenType::Minus]) {
+            let token = self.previous();
+            let operator = token_to_binary(token);
+            let right = self.parse_factor()?;
+            expr = Expr::Binary {
+                operator,
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
+    }
+    fn parse_factor(&mut self) -> Result<Expr, ParserError> {
+        let mut expr = self.parse_unary()?;
+        while self.match_current(&vec![TokenType::Slash, TokenType::Star]) {
+            let token = self.previous();
+            let operator = token_to_binary(token);
+            let right = self.parse_unary()?;
+            expr = Expr::Binary {
+                operator,
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn parse_unary(&mut self) -> Result<Expr, ParserError> {
+        while self.match_current(&vec![TokenType::Bang, TokenType::Minus]) {
+            let token = self.previous();
+            let operator = token_to_unary(token);
+            let operand = self.parse_unary()?;
+            return Ok(Expr::Unary {
+                operator,
+                expression: Box::new(operand),
+            });
+        }
+        self.parse_primary()
+    }
+
+    fn parse_primary(&mut self) -> Result<Expr, ParserError> {
+        let token = self.advance();
+
+        if token.is_none() {
+            panic!("unfinished business?")
+        }
+        let token = token.unwrap();
+        match token.r#type {
+            TokenType::False => Ok(Expr::Literal(Literal::False)),
+            TokenType::True => Ok(Expr::Literal(Literal::True)),
+            TokenType::Nil => Ok(Expr::Literal(Literal::Nil)),
+            TokenType::Number(value) => Ok(Expr::Literal(Literal::Number(value))),
+            TokenType::String(value) => Ok(Expr::Literal(Literal::String(value))),
+            TokenType::LeftParen => {
+                let expr = self.parse_expression()?;
+                match self.consume(TokenType::RightParen) {
+                    None => Err(ParserError::UnmatchedParenthesis { line: token.line }),
+                    Some(_) => Ok(Expr::Grouping(Box::new(expr))),
+                }
+            }
+            _ => Err(ParserError::UnexpectedToken {
+                line: token.line,
+                lexeme: if token.r#type == TokenType::EOF {
+                    "End Of File".to_string()
+                } else {
+                    token.lexeme
+                },
+            }),
+        }
     }
 
     /// a better api for this might be to return an Option<Token>
@@ -69,103 +164,16 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         self.previous.clone().unwrap()
     }
 
-    fn comparison(&mut self) -> Result<Expr, ParserError> {
-        let mut expr = self.term()?;
-        while self.match_current(&vec![
-            TokenType::Greater,
-            TokenType::GreaterEqual,
-            TokenType::Less,
-            TokenType::LessEqual,
-        ]) {
-            let token = self.previous();
-            let operator = token_to_binary(token);
-            let right = self.term()?;
-            expr = Expr::Binary {
-                operator,
-                left: Box::new(expr),
-                right: Box::new(right),
-            };
-        }
-        Ok(expr)
-    }
-
-    fn term(&mut self) -> Result<Expr, ParserError> {
-        let mut expr = self.factor()?;
-        while self.match_current(&vec![TokenType::Plus, TokenType::Minus]) {
-            let token = self.previous();
-            let operator = token_to_binary(token);
-            let right = self.factor()?;
-            expr = Expr::Binary {
-                operator,
-                left: Box::new(expr),
-                right: Box::new(right),
-            };
-        }
-        Ok(expr)
-    }
-    fn factor(&mut self) -> Result<Expr, ParserError> {
-        let mut expr = self.unary()?;
-        while self.match_current(&vec![TokenType::Slash, TokenType::Star]) {
-            let token = self.previous();
-            let operator = token_to_binary(token);
-            let right = self.unary()?;
-            expr = Expr::Binary {
-                operator,
-                left: Box::new(expr),
-                right: Box::new(right),
-            };
-        }
-        Ok(expr)
-    }
-
-    fn unary(&mut self) -> Result<Expr, ParserError> {
-        while self.match_current(&vec![TokenType::Bang, TokenType::Minus]) {
-            let token = self.previous();
-            let operator = token_to_unary(token);
-            let operand = self.unary()?;
-            return Ok(Expr::Unary {
-                operator,
-                expression: Box::new(operand),
-            });
-        }
-        self.primary()
-    }
-
-    fn primary(&mut self) -> Result<Expr, ParserError> {
-        let token = self.advance();
-
-        if token.is_none() {
-            panic!("unfinished business?")
-        }
-        let token = token.unwrap();
-        match token.r#type {
-            TokenType::False => Ok(Expr::Literal(Literal::False)),
-            TokenType::True => Ok(Expr::Literal(Literal::True)),
-            TokenType::Nil => Ok(Expr::Literal(Literal::Nil)),
-            TokenType::Number(value) => Ok(Expr::Literal(Literal::Number(value))),
-            TokenType::String(value) => Ok(Expr::Literal(Literal::String(value))),
-            TokenType::LeftParen => {
-                let expr = self.expression()?;
-                match self.consume(TokenType::RightParen) {
-                    None => Err(ParserError::UnmatchedParenthesis { line: token.line }),
-                    Some(_) => Ok(Expr::Grouping(Box::new(expr))),
-                }
-            }
-            _ => Err(ParserError::UnexpectedToken {
-                line: token.line,
-                lexeme: if token.r#type == TokenType::EOF {
-                    "End Of File".to_string()
-                } else {
-                    token.lexeme
-                },
-            }),
-        }
-    }
-
     fn consume(&mut self, token_type: TokenType) -> Option<Token> {
         let matched = self.tokens.next_if(|t| t.r#type == token_type);
         self.previous = matched.clone();
         matched
+    }
+
+    fn advance(&mut self) -> Option<Token> {
+        let token = self.tokens.next();
+        self.previous = token.clone();
+        token
     }
 
     /// 'synchronize' in the book. Not used yet.
@@ -218,12 +226,6 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 TokenType::EOF => {}
             }
         }
-    }
-
-    fn advance(&mut self) -> Option<Token> {
-        let token = self.tokens.next();
-        self.previous = token.clone();
-        token
     }
 }
 
