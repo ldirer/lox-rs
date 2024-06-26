@@ -5,24 +5,33 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 enum ParserError {}
-struct Parser {
-    tokens: Peekable<Box<dyn Iterator<Item = Token>>>,
+struct Parser<T: Iterator<Item = Token>> {
+    tokens: Peekable<T>,
     current: usize,
     previous: Option<Token>,
 }
 
-fn parse(tokens: Box<dyn Iterator<Item = Token>>) -> Result<Expr, ParserError> {
-    let tokens = tokens.peekable();
-    // for token in tokens {}
-    let mut parser = Parser {
-        tokens,
-        current: 0,
-        previous: None,
-    };
+fn parse<T>(tokens: T) -> Result<Expr, ParserError>
+where
+    T: Iterator<Item = Token>,
+{
+    let mut parser = Parser::new(tokens);
     Ok(parser.expression())
 }
 
-impl Parser {
+impl<T: Iterator<Item = Token>> Parser<T> {
+    fn new(tokens: T) -> Self {
+        let tokens = tokens.peekable();
+        Parser {
+            tokens,
+            current: 0,
+            previous: None,
+        }
+    }
+
+    fn expression(&mut self) -> Expr {
+        self.equality()
+    }
     fn equality(&mut self) -> Expr {
         let mut expr = self.comparison();
         while self.match_current(&vec![TokenType::BangEqual, TokenType::EqualEqual]) {
@@ -113,7 +122,10 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Expr {
-        let token = self.peek();
+        // TODO not great to hand-manage next and previous here I think
+        let token = self.tokens.next();
+        self.previous = token.clone();
+
         if token.is_none() {
             panic!("unfinished business?")
         }
@@ -146,14 +158,84 @@ impl Parser {
     }
 
     fn consume(&mut self, token_type: TokenType) -> Option<Token> {
-        self.tokens.next_if(|t| t.r#type == token_type)
-    }
-
-    fn expression(&mut self) -> Expr {
-        self.equality()
+        let matched = self.tokens.next_if(|t| t.r#type == token_type);
+        self.previous = matched.clone();
+        matched
     }
 
     fn peek(&mut self) -> Option<&Token> {
         self.tokens.peek()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ast::Expr;
+    use crate::parser::{parse, Parser};
+    use crate::scanner::tokenize;
+    use crate::token::{Token, TokenType};
+
+    #[test]
+    fn test_match_current() {
+        let tokens = vec![Token {
+            r#type: TokenType::Plus,
+            lexeme: "+".to_string(),
+            line: 1,
+        }];
+        let mut parser = Parser::new(tokens.into_iter());
+        let matched = parser.match_current(&vec![TokenType::Plus]);
+        assert!(matched);
+        // cursor should have moved
+        let matched_again = parser.match_current(&vec![TokenType::Plus]);
+        assert!(!matched_again);
+    }
+
+    #[test]
+    fn test_binary_simple() {
+        let tokens = tokenize("1 + 2".to_string(), |error| panic!("{}", error));
+        println!("tokens: {tokens:#?}");
+        let expr = parse(tokens.into_iter()).unwrap();
+        assert_eq!(
+            expr,
+            Expr::Binary {
+                operator: Token {
+                    r#type: TokenType::Plus,
+                    lexeme: "+".to_string(),
+                    line: 1,
+                },
+                left: Box::new(Expr::Literal(Token {
+                    r#type: TokenType::Number(1.),
+                    lexeme: "1".to_string(),
+                    line: 1,
+                })),
+                right: Box::new(Expr::Literal(Token {
+                    r#type: TokenType::Number(2.),
+                    lexeme: "2".to_string(),
+                    line: 1,
+                }))
+            }
+        )
+    }
+
+    #[test]
+    fn test_unary_simple() {
+        let tokens = tokenize("-2".to_string(), |error| panic!("{}", error));
+        // println!("tokens: {tokens:#?}");
+        let expr = parse(tokens.into_iter()).unwrap();
+        assert_eq!(
+            expr,
+            Expr::Unary {
+                operator: Token {
+                    r#type: TokenType::Minus,
+                    lexeme: "-".to_string(),
+                    line: 1,
+                },
+                expression: Box::new(Expr::Literal(Token {
+                    r#type: TokenType::Number(2.),
+                    lexeme: "2".to_string(),
+                    line: 1,
+                })),
+            }
+        )
     }
 }
