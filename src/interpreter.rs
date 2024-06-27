@@ -1,9 +1,13 @@
 use crate::ast::{BinaryOperator, Expr, Literal, Statement, UnaryOperator};
+use crate::environment::Environment;
 use crate::interpreter::LoxValue::*;
+use std::cell::RefCell;
 use std::io::Write;
+use std::rc::Rc;
 use thiserror::Error;
 use BinaryOperator::*;
 
+type LoxEnvironment = Environment<LoxValue>;
 #[derive(Debug, PartialEq, Error)]
 pub enum InterpreterError {
     // TODO having dedicated types for the AST was nice, but line numbers in errors are even nicer.
@@ -29,50 +33,75 @@ enum LoxValue {
     LNil,
 }
 
+/// this enum is an effort to keep functions pure (no actual printing) so we can test them.
+/// I don't know whether extending it to variable assignment is a good idea. Seems like it might backfire.
 enum Command {
     Print { value: LoxValue },
 }
 
-pub fn interpret_program(program: &Vec<Statement>) -> Result<(), InterpreterError> {
+// now I added a generic write type it's a mix of two patterns to achieve testability.
+// I think only the write redirection will be useful. Messy :)
+fn execute_command<W: Write>(command: Command, writer: &mut W) -> Result<(), std::io::Error> {
+    match command {
+        Command::Print { value } => writeln!(writer, "{:?}", value),
+    }
+}
+
+pub fn interpret_program<W: Write>(
+    program: &Vec<Statement>,
+    writer: &mut W,
+) -> Result<(), InterpreterError> {
+    let environment = Rc::new(RefCell::new(LoxEnvironment::new(None)));
+    interpret_program_with_env(program, writer, environment)
+}
+
+pub fn interpret_program_with_env<W: Write>(
+    program: &Vec<Statement>,
+    writer: &mut W,
+    environment: Rc<RefCell<LoxEnvironment>>,
+) -> Result<(), InterpreterError> {
     for statement in program {
-        let command = interpret_statement(statement)?;
+        let command = interpret_statement(statement, environment.clone())?;
         if let Some(c) = command {
-            execute_command(c);
+            execute_command(c, writer).unwrap();
         }
     }
     Ok(())
 }
-
-fn execute_command(command: Command) {
-    match command {
-        Command::Print { value } => println!("{:?}", value),
-    }
-}
-
-fn interpret_statement(statement: &Statement) -> Result<Option<Command>, InterpreterError> {
+fn interpret_statement(
+    statement: &Statement,
+    environment: Rc<RefCell<LoxEnvironment>>,
+) -> Result<Option<Command>, InterpreterError> {
     match statement {
         Statement::ExprStatement { expression } => {
-            interpret_expression(expression)?;
+            interpret_expression(expression, environment.clone())?;
             Ok(None)
         }
         Statement::PrintStatement { expression } => {
-            let value = interpret_expression(expression)?;
+            let value = interpret_expression(expression, environment.clone())?;
             Ok(Some(Command::Print { value }))
         }
-        Statement::VarDeclaration { .. } => {
-            todo!()
+        Statement::VarDeclaration { name, initializer } => {
+            environment.borrow_mut().define(
+                name.clone(),
+                interpret_expression(initializer, environment.clone())?,
+            );
+            Ok(None)
         }
     }
 }
 
-fn interpret_expression(expr: &Expr) -> Result<LoxValue, InterpreterError> {
+fn interpret_expression(
+    expr: &Expr,
+    environment: Rc<RefCell<LoxEnvironment>>,
+) -> Result<LoxValue, InterpreterError> {
     match expr {
         Expr::Literal(literal) => Ok(interpret_literal(literal)),
         Expr::Unary {
             operator,
             expression,
         } => {
-            let lox_operand = interpret_expression(expression)?;
+            let lox_operand = interpret_expression(expression, environment.clone())?;
             interpret_unary(operator, lox_operand)
         }
         Expr::Binary {
@@ -80,16 +109,19 @@ fn interpret_expression(expr: &Expr) -> Result<LoxValue, InterpreterError> {
             left,
             right,
         } => {
-            let lox_left_value = interpret_expression(left)?;
-            let lox_right_value = interpret_expression(right)?;
+            let lox_left_value = interpret_expression(left, environment.clone())?;
+            let lox_right_value = interpret_expression(right, environment.clone())?;
             interpret_binary(operator, lox_left_value, lox_right_value)
         }
-        Expr::Grouping(grouped_expr) => interpret_expression(grouped_expr),
-        Expr::Variable { .. } => {
-            todo!()
-        }
-        Expr::Assign { .. } => {
-            todo!()
+        Expr::Grouping(grouped_expr) => interpret_expression(grouped_expr, environment.clone()),
+        Expr::Variable { name } => Ok(environment.borrow().lookup(name.clone())),
+        Expr::Assign { name, value } => {
+            let left_hand_side = interpret_expression(value, environment.clone())?;
+            environment
+                .borrow_mut()
+                .assign(name.clone(), left_hand_side.clone());
+            // there's probably something wrong here about cloning if the value is mutable.
+            Ok(left_hand_side)
         }
     }
 }
@@ -163,18 +195,24 @@ fn interpret_literal(literal: &Literal) -> LoxValue {
 #[cfg(test)]
 mod tests {
     use crate::ast::BinaryOperator::Plus;
-    use crate::interpreter::{interpret_expression, InterpreterError, LoxValue};
-    use crate::test_helpers::{parse_expr, parse_statement};
+    use crate::interpreter::{
+        interpret_expression, interpret_program, InterpreterError, LoxEnvironment, LoxValue,
+    };
+    use crate::test_helpers::{parse_expr, parse_program};
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     ///assumes success
     fn get_lox_value(code: &str) -> LoxValue {
         let expr = parse_expr(code).expect("error in test setup");
-        interpret_expression(&expr).unwrap()
+        let env = LoxEnvironment::new(None);
+        interpret_expression(&expr, Rc::new(RefCell::new(env))).unwrap()
     }
 
     fn get_lox_error(code: &str) -> InterpreterError {
         let expr = parse_expr(code).expect("error in test setup");
-        let lox_value = interpret_expression(&expr);
+        let env = LoxEnvironment::new(None);
+        let lox_value = interpret_expression(&expr, Rc::new(RefCell::new(env)));
         assert!(lox_value.is_err());
         lox_value.err().unwrap()
     }
@@ -247,5 +285,14 @@ mod tests {
     }
 
     #[test]
-    fn test_interpret_statement() {}
+    fn test_interpret_variables() {
+        let program = parse_program("var a = 1;\nprint a;").expect("error in test setup");
+        let env = LoxEnvironment::new(None);
+        let mut mock_writer: Vec<u8> = Vec::new();
+
+        interpret_program(&program, &mut mock_writer).expect("error! test failed.");
+
+        let written = String::from_utf8(mock_writer).unwrap();
+        assert_eq!(written, format!("{:?}\n", LoxValue::LNumber(1.)));
+    }
 }

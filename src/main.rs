@@ -12,6 +12,7 @@ use crate::scanner::{tokenize, ScanningError};
 use thiserror::Error;
 
 mod ast;
+mod environment;
 mod interpreter;
 mod parser;
 mod scanner;
@@ -82,7 +83,7 @@ fn run(source: String) {
     let tokens = tokenize(source, scanner_error);
     let parsed = parse(tokens.into_iter());
     match parsed {
-        Ok(statements) => match interpret_program(&statements) {
+        Ok(statements) => match interpret_program(&statements, &mut std::io::stdout()) {
             Ok(_) => {}
             Err(err) => println!("Interpreter error: {err}"),
         },
