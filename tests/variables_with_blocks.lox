@@ -1,0 +1,23 @@
+var a = 1;
+
+print "shadowing declaration in a block, next print should be 4"
+{
+    var a = 2;
+    print a * a;
+}
+
+print "global scope should not have been affected, next print should be 1"
+print a * a;
+
+print "now going to change the value in global scope from inside a block, next print should be 4"
+{
+    a = 2;
+}
+print a * a;
+
+
+print "using a global variable and a local one inside a block, next print should be 6"
+{
+var b = 3;
+print a * b;
+}
