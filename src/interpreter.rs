@@ -121,19 +121,16 @@ fn interpret_literal(literal: &Literal) -> LoxValue {
 mod tests {
     use crate::ast::BinaryOperator::Plus;
     use crate::interpreter::{interpret_expression, InterpreterError, LoxValue};
-    use crate::parser::parse;
-    use crate::scanner::tokenize;
+    use crate::test_helpers::{parse_expr, parse_statement};
 
     ///assumes success
     fn get_lox_value(code: &str) -> LoxValue {
-        let tokens = tokenize(code.to_string(), |err| panic!("{}", err));
-        let expr = parse(tokens.into_iter()).expect("error in test setup");
+        let expr = parse_expr(code).expect("error in test setup");
         interpret_expression(&expr).unwrap()
     }
 
     fn get_lox_error(code: &str) -> InterpreterError {
-        let tokens = tokenize(code.to_string(), |err| panic!("{}", err));
-        let expr = parse(tokens.into_iter()).expect("error in test setup");
+        let expr = parse_expr(code).expect("error in test setup");
         let lox_value = interpret_expression(&expr);
         assert!(lox_value.is_err());
         lox_value.err().unwrap()

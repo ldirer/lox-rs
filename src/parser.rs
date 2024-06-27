@@ -2,7 +2,7 @@ use std::iter::Peekable;
 
 use thiserror::Error;
 
-use crate::ast::{BinaryOperator, Expr, Literal, UnaryOperator};
+use crate::ast::{BinaryOperator, Expr, Literal, Statement, UnaryOperator};
 use crate::token::{Token, TokenType};
 
 #[derive(Debug, Error, PartialEq)]
@@ -11,28 +11,68 @@ pub enum ParserError {
     UnmatchedParenthesis { line: usize },
     #[error("line: {line}. Unexpected token {lexeme}.")]
     UnexpectedToken { line: usize, lexeme: String },
+    // line is not implemented yet for missing tokens
+    #[error("line: {line}. Expected ';' after value.")]
+    MissingSemicolonPrint { line: usize },
+    #[error("line: {line}. Expected ';' after expression.")]
+    MissingSemicolonExpressionStatement { line: usize },
 }
-struct Parser<T: Iterator<Item = Token>> {
+pub struct Parser<T: Iterator<Item = Token>> {
     tokens: Peekable<T>,
 }
 
-pub fn parse<T>(tokens: T) -> Result<Expr, ParserError>
+pub fn parse<T>(tokens: T) -> Result<Vec<Statement>, ParserError>
 where
     T: Iterator<Item = Token>,
 {
     let mut parser = Parser::new(tokens);
-    parser.parse_expression()
+    parser.parse_program()
 }
 
 impl<T: Iterator<Item = Token>> Parser<T> {
-    fn new(tokens: T) -> Self {
+    pub(crate) fn new(tokens: T) -> Self {
         let tokens = tokens.peekable();
         Parser { tokens }
     }
 
+    // clean error handling not the focus yet
+    fn parse_program(&mut self) -> Result<Vec<Statement>, ParserError> {
+        let mut statements: Vec<Statement> = vec![];
+        while !self.is_at_end() {
+            statements.push(self.parse_statement()?);
+        }
+        Ok(statements)
+    }
+
+    pub(crate) fn parse_statement(&mut self) -> Result<Statement, ParserError> {
+        match self.match_current(&vec![TokenType::Print]) {
+            Some(_) => self.parse_print_statement(),
+            None => self.parse_expression_statement(),
+        }
+    }
+
+    fn parse_print_statement(&mut self) -> Result<Statement, ParserError> {
+        let expr = self.parse_expression()?;
+        let token_match = self.match_current(&vec![TokenType::Semicolon]);
+        match token_match {
+            // todo grab the line somehow? on the previous token. '.previous' that I removed would be useful here.
+            None => Err(ParserError::MissingSemicolonPrint { line: 0 }),
+            Some(_) => Ok(Statement::PrintStatement { expression: expr }),
+        }
+    }
+
+    fn parse_expression_statement(&mut self) -> Result<Statement, ParserError> {
+        let expr = self.parse_expression()?;
+        let token_match = self.match_current(&vec![TokenType::Semicolon]);
+        match token_match {
+            None => Err(ParserError::MissingSemicolonExpressionStatement { line: 0 }),
+            Some(_) => Ok(Statement::ExprStatement { expression: expr }),
+        }
+    }
+
     /// parsing functions encode grammar rules. This code should be read with the grammar.
     /// in particular, the grammar used here (from the book) encodes precedence rules.
-    fn parse_expression(&mut self) -> Result<Expr, ParserError> {
+    pub(crate) fn parse_expression(&mut self) -> Result<Expr, ParserError> {
         self.parse_equality()
     }
     fn parse_equality(&mut self) -> Result<Expr, ParserError> {
@@ -157,6 +197,11 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         token
     }
 
+    #[allow(clippy::wrong_self_convention)]
+    fn is_at_end(&mut self) -> bool {
+        self.tokens.peek().is_none()
+    }
+
     /// 'synchronize' in the book. Not used yet.
     /// The idea is that when there's an error, we don't want to show many 'cascading errors'.
     /// So we use 'anchor points' in tokens where it's likely we are back to a clean state.
@@ -239,9 +284,10 @@ fn token_to_binary(token: Token) -> BinaryOperator {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{format_lisp_like, BinaryOperator, Expr, Literal, UnaryOperator};
-    use crate::parser::{parse, Parser, ParserError};
-    use crate::scanner::tokenize;
+    use crate::ast::Literal::Number;
+    use crate::ast::{format_lisp_like, BinaryOperator, Expr, Literal, Statement, UnaryOperator};
+    use crate::parser::{Parser, ParserError};
+    use crate::test_helpers::{parse_expr, parse_statement};
     use crate::token::{Token, TokenType};
 
     #[test]
@@ -261,9 +307,7 @@ mod tests {
 
     #[test]
     fn test_binary_simple() {
-        let tokens = tokenize("1 + 2".to_string(), |error| panic!("{}", error));
-        println!("tokens: {tokens:#?}");
-        let expr = parse(tokens.into_iter()).unwrap();
+        let expr = parse_expr("1 + 2").unwrap();
         assert_eq!(
             expr,
             Expr::Binary {
@@ -276,8 +320,7 @@ mod tests {
 
     #[test]
     fn test_unary_simple() {
-        let tokens = tokenize("-2".to_string(), |error| panic!("{}", error));
-        let expr = parse(tokens.into_iter()).unwrap();
+        let expr = parse_expr("-2").unwrap();
         assert_eq!(
             expr,
             Expr::Unary {
@@ -288,11 +331,8 @@ mod tests {
     }
 
     #[test]
-    fn test_precedence_1() {
-        let tokens = tokenize("3 + 2 * (-2 + 3) == 5".to_string(), |error| {
-            panic!("{}", error)
-        });
-        let expr = parse(tokens.into_iter()).unwrap();
+    fn test_precedence() {
+        let expr = parse_expr("3 + 2 * (-2 + 3) == 5").unwrap();
 
         // I'd use RPN but I don't understand it :)
         // "3 2 2 - 3 + * + 5 =="
@@ -304,16 +344,14 @@ mod tests {
 
     #[test]
     fn test_unmatched_parenthesis() {
-        let tokens = tokenize("\n((1 + 2) / 1".to_string(), |error| panic!("{}", error));
-        let expr = parse(tokens.into_iter());
+        let expr = parse_expr("\n((1 + 2) / 1");
         assert!(expr.is_err());
         let err = expr.err().unwrap();
         assert_eq!(err, ParserError::UnmatchedParenthesis { line: 2 });
     }
     #[test]
     fn test_unfinished_expression() {
-        let tokens = tokenize("1 + ".to_string(), |error| panic!("{}", error));
-        let expr = parse(tokens.into_iter());
+        let expr = parse_expr("1 + ");
         assert!(expr.is_err());
         let err = expr.err().unwrap();
         assert_eq!(
@@ -323,5 +361,35 @@ mod tests {
                 lexeme: "End Of File".to_string()
             }
         );
+    }
+
+    #[test]
+    fn test_print_statement() {
+        let statement = parse_statement("print 1;").unwrap();
+        assert_eq!(
+            statement,
+            Statement::PrintStatement {
+                expression: Expr::Literal(Number(1.))
+            }
+        )
+    }
+
+    #[test]
+    fn test_statement_missing_semicolon() {
+        [
+            (
+                "1 + 3",
+                ParserError::MissingSemicolonExpressionStatement { line: 0 },
+            ),
+            (
+                "print 1 + 3",
+                ParserError::MissingSemicolonPrint { line: 0 },
+            ),
+        ]
+        .into_iter()
+        .for_each(|(code, expected_error)| {
+            let err = parse_statement(code).unwrap_err();
+            assert_eq!(err, expected_error);
+        })
     }
 }

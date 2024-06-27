@@ -1,6 +1,13 @@
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, PartialEq)]
+pub enum Statement {
+    ExprStatement { expression: Expr },
+    // reminder that this is a statement (and not a library function) so that we can get some lox
+    // code running before our interpreter handles functions (comes later in the book).
+    PrintStatement { expression: Expr },
+}
+#[derive(Debug, PartialEq)]
 pub enum Expr {
     Literal(Literal),
     Unary {

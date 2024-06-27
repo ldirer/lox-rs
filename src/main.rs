@@ -13,6 +13,7 @@ mod ast;
 mod interpreter;
 mod parser;
 mod scanner;
+mod test_helpers;
 mod token;
 
 #[derive(Debug, Error)]
