@@ -20,6 +20,8 @@ pub enum ParserError {
     InvalidSyntaxVarDeclaration { line: usize },
     #[error("line: {line}. Expected ';' after variable declaration.")]
     MissingSemicolonVariableDeclaration { line: usize },
+    #[error("line: {line}. Invalid assignment target.")]
+    InvalidAssignmentTarget { line: usize },
 }
 pub struct Parser<T: Iterator<Item = Token>> {
     tokens: Peekable<T>,
@@ -114,7 +116,22 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     /// parsing functions encode grammar rules. This code should be read with the grammar.
     /// in particular, the grammar used here (from the book) encodes precedence rules.
     pub(crate) fn parse_expression(&mut self) -> Result<Expr, ParserError> {
-        self.parse_equality()
+        self.parse_assignment()
+    }
+
+    fn parse_assignment(&mut self) -> Result<Expr, ParserError> {
+        let expr = self.parse_equality()?;
+        match (self.match_current(&vec![TokenType::Equal]), &expr) {
+            (None, _) => Ok(expr),
+            (Some(_), Expr::Variable { name }) => {
+                let value = self.parse_assignment()?;
+                Ok(Expr::Assign {
+                    name: name.clone(),
+                    value: Box::new(value),
+                })
+            }
+            (Some(token), _) => Err(ParserError::InvalidAssignmentTarget { line: token.line }),
+        }
     }
 
     fn parse_equality(&mut self) -> Result<Expr, ParserError> {
@@ -338,6 +355,7 @@ fn token_to_binary(token: Token) -> BinaryOperator {
 #[cfg(test)]
 mod tests {
     use crate::ast::Literal::Number;
+    use crate::ast::Statement::ExprStatement;
     use crate::ast::{format_lisp_like, BinaryOperator, Expr, Literal, Statement, UnaryOperator};
     use crate::parser::{Parser, ParserError};
     use crate::test_helpers::{parse_expr, parse_program, parse_statement};
@@ -461,6 +479,20 @@ mod tests {
         // this is valid at this stage, the parser allows undefined variables (interpreter would throw a runtime error)
         let parsed = parse_program("a + b == 3;").unwrap();
         assert_eq!(parsed.len(), 1);
+    }
+    #[test]
+    fn test_variable_assignment() {
+        let parsed = parse_program("a = 3;").unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(
+            parsed[0],
+            ExprStatement {
+                expression: Expr::Assign {
+                    value: Box::from(Expr::Literal(Number(3.))),
+                    name: "a".to_string()
+                }
+            }
+        );
     }
 
     #[test]

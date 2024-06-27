@@ -88,6 +88,9 @@ fn interpret_expression(expr: &Expr) -> Result<LoxValue, InterpreterError> {
         Expr::Variable { .. } => {
             todo!()
         }
+        Expr::Assign { .. } => {
+            todo!()
+        }
     }
 }
 

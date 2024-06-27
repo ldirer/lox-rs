@@ -10,6 +10,10 @@ pub enum Statement {
 }
 #[derive(Debug, PartialEq)]
 pub enum Expr {
+    Assign {
+        name: String,
+        value: Box<Expr>,
+    },
     Literal(Literal),
     Unary {
         operator: UnaryOperator,
@@ -119,6 +123,9 @@ pub fn format_lisp_like(expr: &Expr) -> String {
         Expr::Variable { name } => {
             format!("{name}")
         }
+        Expr::Assign { .. } => {
+            panic!("Assign not supported")
+        }
     }
 }
 
@@ -154,6 +161,9 @@ pub fn format_reverse_polish_notation(expr: &Expr) -> String {
         }
         Expr::Variable { name } => {
             format!("{}", name)
+        }
+        Expr::Assign { .. } => {
+            panic!("Assign not supported")
         }
     }
 }
