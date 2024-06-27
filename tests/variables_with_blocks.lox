@@ -21,3 +21,12 @@ print "using a global variable and a local one inside a block, next print should
 var b = 3;
 print a * b;
 }
+
+print "using nested blocks, next print should be 8";
+{
+var b = 4;
+{
+    var a = 2;
+    print a * b;
+}
+}
