@@ -5,9 +5,11 @@ use std::path::Path;
 use std::process::exit;
 use std::{env, io};
 
-use thiserror::Error;
-
+use crate::ast::Statement;
+use crate::interpreter::interpret_program;
+use crate::parser::{parse, ParserError};
 use crate::scanner::{tokenize, ScanningError};
+use thiserror::Error;
 
 mod ast;
 mod interpreter;
@@ -22,6 +24,8 @@ enum CLIError {
     IoError(#[from] std::io::Error),
     #[error("file does not seem to exist {0}")]
     FileDoesNotExist(String),
+    //     TODO need to add a 'catch all' error if I want to return interpreter/parser/scanning errors?
+    // handling them is all well and nice but this means we don't have a stacktrace...
 }
 
 fn main() -> Result<(), color_eyre::eyre::Error> {
@@ -53,7 +57,6 @@ fn run_file(path_string: &String) -> Result<(), CLIError> {
         return Err(CLIError::FileDoesNotExist(String::to_string(path_string)));
     }
     let self_content = read_to_string(path)?;
-    println!("FILE CONTENT {self_content}");
     run(self_content);
     return Ok(());
 }
@@ -76,24 +79,32 @@ fn run_prompt() -> Result<(), CLIError> {
 
 fn run(source: String) {
     // passing a 'handle error' callback to stick to the book.
-    for token in tokenize(source, scanner_error) {
-        println!("{token:?}");
+    let tokens = tokenize(source, scanner_error);
+    let parsed = parse(tokens.into_iter());
+    match parsed {
+        Ok(statements) => match interpret_program(&statements) {
+            Ok(_) => {}
+            Err(err) => println!("Interpreter error: {err}"),
+        },
+        Err(err) => {
+            println!("Parser error: {err}")
+        }
     }
 }
 
 fn scanner_error(err: ScanningError) {
     match err {
         ScanningError::UnexpectedCharacter { line, character: _ } => {
-            report(line, "", &format!("{err}"))
+            report(line, "", &format!("Scanner error: {err}"))
         }
         ScanningError::UnterminatedString {
             line,
             string_start: _,
-        } => report(line, "", &format!("{err}")),
+        } => report(line, "", &format!("Scanner error: {err}")),
         ScanningError::UnterminatedBlockComment {
             line,
             comment_start: _,
-        } => report(line, "", &format!("{err}")),
+        } => report(line, "", &format!("Scanner error: {err}")),
     }
 }
 

@@ -1,10 +1,11 @@
-use crate::ast::{BinaryOperator, Expr, Literal, UnaryOperator};
+use crate::ast::{BinaryOperator, Expr, Literal, Statement, UnaryOperator};
 use crate::interpreter::LoxValue::*;
+use std::io::Write;
 use thiserror::Error;
 use BinaryOperator::*;
 
 #[derive(Debug, PartialEq, Error)]
-enum InterpreterError {
+pub enum InterpreterError {
     // TODO having dedicated types for the AST was nice, but line numbers in errors are even nicer.
     // need to get them somehow.
     #[error("operation {operator} not supported between {left:?} and {right:?}")]
@@ -26,6 +27,39 @@ enum LoxValue {
     LNumber(f64),
     LBool(bool),
     LNil,
+}
+
+enum Command {
+    Print { value: LoxValue },
+}
+
+pub fn interpret_program(program: &Vec<Statement>) -> Result<(), InterpreterError> {
+    for statement in program {
+        let command = interpret_statement(statement)?;
+        if let Some(c) = command {
+            execute_command(c);
+        }
+    }
+    Ok(())
+}
+
+fn execute_command(command: Command) {
+    match command {
+        Command::Print { value } => println!("{:?}", value),
+    }
+}
+
+fn interpret_statement(statement: &Statement) -> Result<Option<Command>, InterpreterError> {
+    match statement {
+        Statement::ExprStatement { expression } => {
+            interpret_expression(expression)?;
+            Ok(None)
+        }
+        Statement::PrintStatement { expression } => {
+            let value = interpret_expression(expression)?;
+            Ok(Some(Command::Print { value }))
+        }
+    }
 }
 
 fn interpret_expression(expr: &Expr) -> Result<LoxValue, InterpreterError> {
@@ -202,4 +236,7 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn test_interpret_statement() {}
 }

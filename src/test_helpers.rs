@@ -18,3 +18,9 @@ pub fn parse_statement(code: &str) -> Result<Statement, ParserError> {
     let mut parser = Parser::new(tokens.into_iter());
     parser.parse_statement()
 }
+
+pub fn parse_program(code: &str) -> Result<Vec<Statement>, ParserError> {
+    let tokens = tokenize(code.to_string(), |error| panic!("{}", error));
+    let mut parser = Parser::new(tokens.into_iter());
+    parser.parse_program()
+}

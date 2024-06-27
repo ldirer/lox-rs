@@ -36,7 +36,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     // clean error handling not the focus yet
-    fn parse_program(&mut self) -> Result<Vec<Statement>, ParserError> {
+    pub fn parse_program(&mut self) -> Result<Vec<Statement>, ParserError> {
         let mut statements: Vec<Statement> = vec![];
         while !self.is_at_end() {
             statements.push(self.parse_statement()?);
@@ -199,7 +199,12 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
     #[allow(clippy::wrong_self_convention)]
     fn is_at_end(&mut self) -> bool {
+        // we check two things. Does not feel clean.
         self.tokens.peek().is_none()
+            || self
+                .tokens
+                .peek()
+                .is_some_and(|t| t.r#type == TokenType::EOF)
     }
 
     /// 'synchronize' in the book. Not used yet.
@@ -287,7 +292,7 @@ mod tests {
     use crate::ast::Literal::Number;
     use crate::ast::{format_lisp_like, BinaryOperator, Expr, Literal, Statement, UnaryOperator};
     use crate::parser::{Parser, ParserError};
-    use crate::test_helpers::{parse_expr, parse_statement};
+    use crate::test_helpers::{parse_expr, parse_program, parse_statement};
     use crate::token::{Token, TokenType};
 
     #[test]
@@ -391,5 +396,12 @@ mod tests {
             let err = parse_statement(code).unwrap_err();
             assert_eq!(err, expected_error);
         })
+    }
+
+    #[test]
+    fn test_program() {
+        // let parsed = parse_program("print 2;").unwrap();
+        let parsed = parse_program("// hello comment\nprint 1;\nprint 2;\n").unwrap();
+        assert_eq!(parsed.len(), 2);
     }
 }

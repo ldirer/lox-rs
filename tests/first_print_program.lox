@@ -1,0 +1,5 @@
+print nil;
+print 7 - 3 * 2;
+print true;
+print 1 == 9;
+print "Hello, World!";
