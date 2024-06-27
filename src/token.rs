@@ -48,9 +48,9 @@ pub enum TokenType {
     Var,
     While,
 
-    Identifier(String),
-    String(String),
-    Number(f64),
+    Identifier,
+    String,
+    Number,
 
     EOF,
 }

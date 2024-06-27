@@ -211,10 +211,7 @@ impl Scanner<'_> {
         // consume closing quote
         self.advance();
 
-        return Ok(TokenType::String(
-            // string without the quotes
-            self.source[self.current_lexeme_start + 1..self.current - 1].to_string(),
-        ));
+        return Ok(TokenType::String);
     }
     fn consume_if_match_number(&mut self) -> TokenType {
         while self.peek_one().is_some_and(is_digit) {
@@ -230,11 +227,7 @@ impl Scanner<'_> {
             self.advance();
         }
 
-        TokenType::Number(
-            self.source[self.current_lexeme_start..self.current]
-                .parse()
-                .unwrap(),
-        )
+        TokenType::Number
     }
     fn consume_if_match_identifier(&mut self) -> TokenType {
         while self.peek_one().is_some_and(is_alphanumeric) {
@@ -245,7 +238,7 @@ impl Scanner<'_> {
 
         match match_keyword(&lexeme) {
             Some(keyword_token) => keyword_token,
-            _ => TokenType::Identifier(lexeme),
+            _ => TokenType::Identifier,
         }
     }
     fn consume_if_match_block_comment(&mut self) -> Result<(), ScanningError> {
@@ -380,7 +373,7 @@ mod tests {
         assert_eq!(
             scanner.tokens[0],
             Token {
-                r#type: TokenType::String("hello".to_string()),
+                r#type: TokenType::String,
                 line: 1,
                 lexeme: "\"hello\"".to_string()
             }
@@ -396,7 +389,7 @@ mod tests {
         assert_eq!(
             tokens[3],
             Token {
-                r#type: TokenType::String("a string \n with newlines in it".to_string()),
+                r#type: TokenType::String,
                 lexeme: "\"a string \n with newlines in it\"".to_string(),
                 line: 2,
             }
@@ -412,7 +405,7 @@ mod tests {
         assert_eq!(
             scanner.tokens[0],
             Token {
-                r#type: TokenType::Number(1.2),
+                r#type: TokenType::Number,
                 line: 1,
                 lexeme: "1.2".to_string()
             }
@@ -428,7 +421,7 @@ mod tests {
         assert_eq!(
             scanner.tokens[0],
             Token {
-                r#type: TokenType::Number(1.0),
+                r#type: TokenType::Number,
                 line: 1,
                 lexeme: "1".to_string()
             }
@@ -444,7 +437,7 @@ mod tests {
         assert_eq!(
             scanner.tokens[2],
             Token {
-                r#type: TokenType::Identifier("some".to_string()),
+                r#type: TokenType::Identifier,
                 lexeme: "some".to_string(),
                 line: 1
             }

@@ -59,6 +59,9 @@ fn interpret_statement(statement: &Statement) -> Result<Option<Command>, Interpr
             let value = interpret_expression(expression)?;
             Ok(Some(Command::Print { value }))
         }
+        Statement::VarDeclaration { .. } => {
+            todo!()
+        }
     }
 }
 
@@ -82,6 +85,9 @@ fn interpret_expression(expr: &Expr) -> Result<LoxValue, InterpreterError> {
             interpret_binary(operator, lox_left_value, lox_right_value)
         }
         Expr::Grouping(grouped_expr) => interpret_expression(grouped_expr),
+        Expr::Variable { .. } => {
+            todo!()
+        }
     }
 }
 

@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 
 #[derive(Debug, PartialEq)]
 pub enum Statement {
+    VarDeclaration { name: String, initializer: Expr },
     ExprStatement { expression: Expr },
     // reminder that this is a statement (and not a library function) so that we can get some lox
     // code running before our interpreter handles functions (comes later in the book).
@@ -20,6 +21,9 @@ pub enum Expr {
         right: Box<Expr>,
     },
     Grouping(Box<Expr>),
+    Variable {
+        name: String,
+    },
 }
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum UnaryOperator {
@@ -112,6 +116,9 @@ pub fn format_lisp_like(expr: &Expr) -> String {
         Expr::Grouping(expr) => {
             format!("(group {})", format_lisp_like(expr))
         }
+        Expr::Variable { name } => {
+            format!("{name}")
+        }
     }
 }
 
@@ -144,6 +151,9 @@ pub fn format_reverse_polish_notation(expr: &Expr) -> String {
         }
         Expr::Grouping(expr) => {
             format!("{}", format_reverse_polish_notation(expr))
+        }
+        Expr::Variable { name } => {
+            format!("{}", name)
         }
     }
 }

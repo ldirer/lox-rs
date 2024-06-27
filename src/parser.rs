@@ -16,6 +16,10 @@ pub enum ParserError {
     MissingSemicolonPrint { line: usize },
     #[error("line: {line}. Expected ';' after expression.")]
     MissingSemicolonExpressionStatement { line: usize },
+    #[error("line: {line}. invalid syntax for variable declaration.")]
+    InvalidSyntaxVarDeclaration { line: usize },
+    #[error("line: {line}. Expected ';' after variable declaration.")]
+    MissingSemicolonVariableDeclaration { line: usize },
 }
 pub struct Parser<T: Iterator<Item = Token>> {
     tokens: Peekable<T>,
@@ -39,9 +43,46 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     pub fn parse_program(&mut self) -> Result<Vec<Statement>, ParserError> {
         let mut statements: Vec<Statement> = vec![];
         while !self.is_at_end() {
-            statements.push(self.parse_statement()?);
+            statements.push(self.parse_declaration()?);
         }
         Ok(statements)
+    }
+
+    pub fn parse_declaration(&mut self) -> Result<Statement, ParserError> {
+        match self.match_current(&vec![TokenType::Var]) {
+            Some(_) => self.parse_var_declaration(),
+            None => self.parse_statement(),
+        }
+    }
+
+    fn parse_var_declaration(&mut self) -> Result<Statement, ParserError> {
+        match self.match_current(&vec![TokenType::Identifier]) {
+            None => return Err(ParserError::InvalidSyntaxVarDeclaration { line: 0 }),
+            Some(Token {
+                r#type: TokenType::Identifier,
+                lexeme: name,
+                ..
+            }) => {
+                let mut initializer = Expr::Literal(Literal::Nil);
+                if self.match_current(&vec![TokenType::Equal]).is_some() {
+                    initializer = self.parse_expression()?;
+                }
+
+                self.consume(
+                    TokenType::Semicolon,
+                    ParserError::MissingSemicolonVariableDeclaration { line: 0 },
+                )?;
+
+                Ok(Statement::VarDeclaration { initializer, name })
+            }
+            Some(t) => unreachable!("unexpected token type for {:?}", t),
+        }
+    }
+    fn consume(&mut self, token_type: TokenType, err: ParserError) -> Result<(), ParserError> {
+        match self.match_current(&vec![token_type]) {
+            None => Err(err),
+            Some(_) => Ok(()),
+        }
     }
 
     pub(crate) fn parse_statement(&mut self) -> Result<Statement, ParserError> {
@@ -75,6 +116,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     pub(crate) fn parse_expression(&mut self) -> Result<Expr, ParserError> {
         self.parse_equality()
     }
+
     fn parse_equality(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.parse_comparison()?;
         while let Some(token) =
@@ -158,11 +200,17 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         }
         let token = token.unwrap();
         match token.r#type {
+            TokenType::Identifier => Ok(Expr::Variable { name: token.lexeme }),
             TokenType::False => Ok(Expr::Literal(Literal::False)),
             TokenType::True => Ok(Expr::Literal(Literal::True)),
             TokenType::Nil => Ok(Expr::Literal(Literal::Nil)),
-            TokenType::Number(value) => Ok(Expr::Literal(Literal::Number(value))),
-            TokenType::String(value) => Ok(Expr::Literal(Literal::String(value))),
+            TokenType::Number => Ok(Expr::Literal(Literal::Number(
+                token.lexeme.parse().unwrap(),
+            ))),
+            // remove quotes from string
+            TokenType::String => Ok(Expr::Literal(Literal::String(
+                token.lexeme[1..token.lexeme.len() - 1].to_string(),
+            ))),
             TokenType::LeftParen => {
                 let expr = self.parse_expression()?;
                 match self.match_current(&vec![TokenType::RightParen]) {
@@ -251,9 +299,9 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 TokenType::Super => {}
                 TokenType::This => {}
                 TokenType::True => {}
-                TokenType::Identifier(_) => {}
-                TokenType::String(_) => {}
-                TokenType::Number(_) => {}
+                TokenType::Identifier => {}
+                TokenType::String => {}
+                TokenType::Number => {}
                 TokenType::EOF => {}
             }
         }
@@ -396,6 +444,23 @@ mod tests {
             let err = parse_statement(code).unwrap_err();
             assert_eq!(err, expected_error);
         })
+    }
+
+    #[test]
+    fn test_variable_declaration() {
+        let parsed = parse_program("var a = 1;").unwrap();
+        assert_eq!(parsed.len(), 1);
+    }
+    #[test]
+    fn test_variable_declaration_no_initializer() {
+        let parsed = parse_program("var a;").unwrap();
+        assert_eq!(parsed.len(), 1);
+    }
+    #[test]
+    fn test_variable_expression() {
+        // this is valid at this stage, the parser allows undefined variables (interpreter would throw a runtime error)
+        let parsed = parse_program("a + b == 3;").unwrap();
+        assert_eq!(parsed.len(), 1);
     }
 
     #[test]
