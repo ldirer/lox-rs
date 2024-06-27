@@ -22,6 +22,8 @@ pub enum ParserError {
     MissingSemicolonVariableDeclaration { line: usize },
     #[error("line: {line}. Invalid assignment target.")]
     InvalidAssignmentTarget { line: usize },
+    #[error("line: {line}. Unclosed block, expected '}}'.")]
+    UnclosedBlock { line: usize },
 }
 pub struct Parser<T: Iterator<Item = Token>> {
     tokens: Peekable<T>,
@@ -70,9 +72,10 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                     initializer = self.parse_expression()?;
                 }
 
+                let line = self.tokens.peek().unwrap().line;
                 self.consume(
                     TokenType::Semicolon,
-                    ParserError::MissingSemicolonVariableDeclaration { line: 0 },
+                    ParserError::MissingSemicolonVariableDeclaration { line },
                 )?;
 
                 Ok(Statement::VarDeclaration { initializer, name })
@@ -80,18 +83,32 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             Some(t) => unreachable!("unexpected token type for {:?}", t),
         }
     }
-    fn consume(&mut self, token_type: TokenType, err: ParserError) -> Result<(), ParserError> {
-        match self.match_current(&vec![token_type]) {
-            None => Err(err),
-            Some(_) => Ok(()),
-        }
-    }
 
     pub(crate) fn parse_statement(&mut self) -> Result<Statement, ParserError> {
-        match self.match_current(&vec![TokenType::Print]) {
-            Some(_) => self.parse_print_statement(),
-            None => self.parse_expression_statement(),
+        if self.match_current(&vec![TokenType::Print]).is_some() {
+            return self.parse_print_statement();
         }
+        if self.match_current(&vec![TokenType::LeftBrace]).is_some() {
+            return Ok(Statement::Block {
+                statements: self.parse_block()?,
+            });
+        }
+        self.parse_expression_statement()
+    }
+
+    fn parse_block(&mut self) -> Result<Vec<Statement>, ParserError> {
+        let mut statements = vec![];
+        while !self.is_at_end()
+            && !self
+                .tokens
+                .peek()
+                .is_some_and(|t| t.r#type == TokenType::RightBrace)
+        {
+            statements.push(self.parse_declaration()?);
+        }
+        let line = self.tokens.peek().unwrap().line;
+        self.consume(TokenType::RightBrace, ParserError::UnclosedBlock { line })?;
+        Ok(statements)
     }
 
     fn parse_print_statement(&mut self) -> Result<Statement, ParserError> {
@@ -260,6 +277,13 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     fn advance(&mut self) -> Option<Token> {
         let token = self.tokens.next();
         token
+    }
+
+    fn consume(&mut self, token_type: TokenType, err: ParserError) -> Result<(), ParserError> {
+        match self.match_current(&vec![token_type]) {
+            None => Err(err),
+            Some(_) => Ok(()),
+        }
     }
 
     #[allow(clippy::wrong_self_convention)]

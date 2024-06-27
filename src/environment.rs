@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 pub struct Environment<T: Clone> {
     // rust book: "interior mutability pattern"
-    parent: Option<Rc<RefCell<Environment<T>>>>,
+    pub(crate) parent: Option<Rc<RefCell<Environment<T>>>>,
     bindings: HashMap<String, T>,
 }
 

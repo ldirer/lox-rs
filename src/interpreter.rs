@@ -35,6 +35,7 @@ enum LoxValue {
 
 /// this enum is an effort to keep functions pure (no actual printing) so we can test them.
 /// I don't know whether extending it to variable assignment is a good idea. Seems like it might backfire.
+#[derive(Debug, PartialEq)]
 enum Command {
     Print { value: LoxValue },
 }
@@ -61,8 +62,8 @@ pub fn interpret_program_with_env<W: Write>(
     environment: Rc<RefCell<LoxEnvironment>>,
 ) -> Result<(), InterpreterError> {
     for statement in program {
-        let command = interpret_statement(statement, environment.clone())?;
-        if let Some(c) = command {
+        let commands = interpret_statement(statement, environment.clone())?;
+        for c in commands {
             execute_command(c, writer).unwrap();
         }
     }
@@ -71,22 +72,32 @@ pub fn interpret_program_with_env<W: Write>(
 fn interpret_statement(
     statement: &Statement,
     environment: Rc<RefCell<LoxEnvironment>>,
-) -> Result<Option<Command>, InterpreterError> {
+) -> Result<Vec<Command>, InterpreterError> {
     match statement {
         Statement::ExprStatement { expression } => {
             interpret_expression(expression, environment.clone())?;
-            Ok(None)
+            Ok(vec![])
         }
         Statement::PrintStatement { expression } => {
             let value = interpret_expression(expression, environment.clone())?;
-            Ok(Some(Command::Print { value }))
+            Ok(vec![Command::Print { value }])
         }
         Statement::VarDeclaration { name, initializer } => {
             environment.borrow_mut().define(
                 name.clone(),
                 interpret_expression(initializer, environment.clone())?,
             );
-            Ok(None)
+            Ok(vec![])
+        }
+        Statement::Block { statements } => {
+            let mut child_env = LoxEnvironment::new(None);
+            child_env.parent = Some(environment.clone());
+            let child_env = Rc::new(RefCell::new(child_env));
+            let mut commands = vec![];
+            for statement in statements {
+                commands.extend(interpret_statement(statement, child_env.clone())?);
+            }
+            Ok(commands)
         }
     }
 }
@@ -196,9 +207,10 @@ fn interpret_literal(literal: &Literal) -> LoxValue {
 mod tests {
     use crate::ast::BinaryOperator::Plus;
     use crate::interpreter::{
-        interpret_expression, interpret_program, InterpreterError, LoxEnvironment, LoxValue,
+        interpret_expression, interpret_program, interpret_statement, Command, InterpreterError,
+        LoxEnvironment, LoxValue,
     };
-    use crate::test_helpers::{parse_expr, parse_program};
+    use crate::test_helpers::{parse_expr, parse_program, parse_statement};
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -282,6 +294,19 @@ mod tests {
                 right: LoxValue::LNumber(1.)
             }
         );
+    }
+
+    #[test]
+    fn test_interpret_statement() {
+        let statement = parse_statement("print \"Hello\";").expect("error in test setup");
+        let env = LoxEnvironment::new(None);
+        let commands = interpret_statement(&statement, Rc::new(RefCell::new(env))).unwrap();
+        assert_eq!(
+            commands,
+            vec![Command::Print {
+                value: LoxValue::LString("Hello".to_string())
+            }]
+        )
     }
 
     #[test]
