@@ -40,15 +40,6 @@ enum LoxValue {
     LNil,
 }
 
-impl LoxValue {
-    pub(crate) fn call(&self, arguments: Vec<LoxValue>) -> Result<(), InterpreterError> {
-        match self {
-            LFunc(lox_function) => lox_function.call(arguments),
-            _ => panic!("cannot call this value {:?}", self),
-        }
-    }
-}
-
 #[derive(Clone)]
 struct LoxFunction {
     name: String,
@@ -71,40 +62,6 @@ impl Debug for LoxFunction {
 impl PartialEq for LoxFunction {
     fn eq(&self, other: &LoxFunction) -> bool {
         self.name == other.name && self.parameters == other.parameters && self.body == other.body
-    }
-}
-
-impl LoxFunction {
-    fn call(&self, arguments: Vec<LoxValue>) -> Result<(), InterpreterError> {
-        if self.parameters.len() != arguments.len() {
-            panic!("lox interpreter: number of arguments did not match number of parameters for function {:?}", self.name);
-        }
-
-        // copy-pasta, this could be factored out. I wonder if I should be reusing the block interpretation too
-        let mut child_env = LoxEnvironment::new(Some(
-            zip(&self.parameters, arguments)
-                .into_iter()
-                .map(|(name, value)| (name.clone(), value))
-                .collect(),
-        ));
-        child_env.parent = Some(self.environment.clone());
-        let child_env = Rc::new(RefCell::new(child_env));
-
-        // let mut child_env = self.environment.clone();
-        // TODO understand why this WAS required (before init on env::new). Looks like the mutable reference stays alive into
-        // the interpret statement calls.
-        // erm... adding a block to make sure the mutable reference 'expires'.
-        // {
-        //     let mut mut_ref = child_env.borrow_mut();
-        //     for (name, value) in zip(&self.parameters, arguments) {
-        //         mut_ref.define(name.clone(), value);
-        //     }
-        // }
-
-        for statement in &self.body {
-            interpret_statement(statement, child_env.clone())?;
-        }
-        Ok(())
     }
 }
 
@@ -261,7 +218,7 @@ fn interpret_expression(
             if let Err(err) = args {
                 return Err(err);
             }
-            lox_func.call(args.unwrap())?;
+            interpret_call(&lox_func, args.unwrap())?;
             Ok(LoxValue::LNil)
         }
     }
@@ -294,14 +251,46 @@ fn interpret_binary(
     }
 }
 
-fn is_equal(left: LoxValue, right: LoxValue) -> bool {
-    match (left, right) {
-        (LNil, LNil) => true,
-        (LBool(l), LBool(r)) => l == r,
-        (LNumber(l), LNumber(r)) => l == r,
-        (LString(l), LString(r)) => l == r,
-        (_, _) => false,
+fn interpret_call(value: &LoxValue, arguments: Vec<LoxValue>) -> Result<(), InterpreterError> {
+    match value {
+        LFunc(lox_function) => interpret_function_call(lox_function, arguments),
+        _ => panic!("cannot call this value {:?}", value),
     }
+}
+
+fn interpret_function_call(
+    lox_func: &LoxFunction,
+    arguments: Vec<LoxValue>,
+) -> Result<(), InterpreterError> {
+    if lox_func.parameters.len() != arguments.len() {
+        panic!("lox interpreter: number of arguments did not match number of parameters for function {:?}", lox_func.name);
+    }
+
+    // copy-pasta, this could be factored out. I wonder if I should be reusing the block interpretation too
+    let mut child_env = LoxEnvironment::new(Some(
+        zip(&lox_func.parameters, arguments)
+            .into_iter()
+            .map(|(name, value)| (name.clone(), value))
+            .collect(),
+    ));
+    child_env.parent = Some(lox_func.environment.clone());
+    let child_env = Rc::new(RefCell::new(child_env));
+
+    // let mut child_env = lox_func.environment.clone();
+    // TODO understand why this WAS required (before init on env::new). Looks like the mutable reference stays alive into
+    // the interpret statement calls.
+    // erm... adding a block to make sure the mutable reference 'expires'.
+    // {
+    //     let mut mut_ref = child_env.borrow_mut();
+    //     for (name, value) in zip(&lox_func.parameters, arguments) {
+    //         mut_ref.define(name.clone(), value);
+    //     }
+    // }
+
+    for statement in &lox_func.body {
+        interpret_statement(statement, child_env.clone())?;
+    }
+    Ok(())
 }
 
 fn interpret_unary(op: &UnaryOperator, operand: LoxValue) -> Result<LoxValue, InterpreterError> {
@@ -314,15 +303,6 @@ fn interpret_unary(op: &UnaryOperator, operand: LoxValue) -> Result<LoxValue, In
         }),
     }
 }
-
-fn is_truthy(v: &LoxValue) -> bool {
-    match v {
-        LNil => false,
-        LBool(value) => *value,
-        _ => true,
-    }
-}
-
 fn interpret_literal(literal: &Literal) -> LoxValue {
     match literal {
         Literal::Number(num) => LNumber(*num),
@@ -330,6 +310,24 @@ fn interpret_literal(literal: &Literal) -> LoxValue {
         Literal::True => LBool(true),
         Literal::False => LBool(false),
         Literal::Nil => LNil,
+    }
+}
+
+fn is_equal(left: LoxValue, right: LoxValue) -> bool {
+    match (left, right) {
+        (LNil, LNil) => true,
+        (LBool(l), LBool(r)) => l == r,
+        (LNumber(l), LNumber(r)) => l == r,
+        (LString(l), LString(r)) => l == r,
+        (_, _) => false,
+    }
+}
+
+fn is_truthy(v: &LoxValue) -> bool {
+    match v {
+        LNil => false,
+        LBool(value) => *value,
+        _ => true,
     }
 }
 
