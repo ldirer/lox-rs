@@ -99,6 +99,30 @@ fn interpret_statement(
             }
             Ok(commands)
         }
+        Statement::IfStatement {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            let cond = interpret_expression(condition, environment.clone())?;
+            if is_truthy(&cond) {
+                return interpret_statement(then_branch, environment.clone());
+            } else {
+                if let Some(branch) = else_branch {
+                    return interpret_statement(branch, environment.clone());
+                }
+                Ok(vec![])
+            }
+        }
+        Statement::WhileStatement { condition, body } => {
+            let cond = interpret_expression(condition, environment.clone())?;
+            // it's weird to gather all commands before evaluating them... Creates a delay we don't really want!!
+            let mut commands = vec![];
+            while is_truthy(&cond) {
+                commands.extend(interpret_statement(body, environment.clone())?);
+            }
+            Ok(commands)
+        }
     }
 }
 
@@ -339,6 +363,33 @@ mod tests {
     #[test]
     fn test_interpret_statement() {
         let statement = parse_statement("print \"Hello\";").expect("error in test setup");
+        let env = LoxEnvironment::new(None);
+        let commands = interpret_statement(&statement, Rc::new(RefCell::new(env))).unwrap();
+        assert_eq!(
+            commands,
+            vec![Command::Print {
+                value: LoxValue::LString("Hello".to_string())
+            }]
+        )
+    }
+
+    #[test]
+    fn test_if_without_else() {
+        let statement = parse_statement("if (1) print \"Hello\";").expect("error in test setup");
+        let env = LoxEnvironment::new(None);
+        let commands = interpret_statement(&statement, Rc::new(RefCell::new(env))).unwrap();
+        assert_eq!(
+            commands,
+            vec![Command::Print {
+                value: LoxValue::LString("Hello".to_string())
+            }]
+        )
+    }
+    #[test]
+    fn test_if_with_else() {
+        let statement =
+            parse_statement("if (1) print \"Hello\"; else print \"should not be printed\";")
+                .expect("error in test setup");
         let env = LoxEnvironment::new(None);
         let commands = interpret_statement(&statement, Rc::new(RefCell::new(env))).unwrap();
         assert_eq!(

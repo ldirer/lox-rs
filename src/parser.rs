@@ -2,6 +2,7 @@ use std::iter::Peekable;
 
 use thiserror::Error;
 
+use crate::ast::Statement::WhileStatement;
 use crate::ast::{BinaryLogicalOperator, BinaryOperator, Expr, Literal, Statement, UnaryOperator};
 use crate::token::{Token, TokenType};
 
@@ -24,6 +25,13 @@ pub enum ParserError {
     InvalidAssignmentTarget { line: usize },
     #[error("line: {line}. Unclosed block, expected '}}'.")]
     UnclosedBlock { line: usize },
+    // these dedicated error types... dont feel very useful.
+    #[error("line: {line}. Missing '(' after 'while'.")]
+    MissingOpeningParenthesisWhile { line: usize },
+    #[error("line: {line}. Missing ')' after condition.")]
+    MissingClosingParenthesisCondition { line: usize },
+    #[error("line: {line}. Missing '(' after 'if'.")]
+    MissingOpeningParenthesisIf { line: i32 },
 }
 pub struct Parser<T: Iterator<Item = Token>> {
     tokens: Peekable<T>,
@@ -88,12 +96,58 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         if self.match_current(&vec![TokenType::Print]).is_some() {
             return self.parse_print_statement();
         }
+        if self.match_current(&vec![TokenType::If]).is_some() {
+            return self.parse_if_statement();
+        }
+
+        if self.match_current(&vec![TokenType::While]).is_some() {
+            return self.parse_while_statement();
+        }
         if self.match_current(&vec![TokenType::LeftBrace]).is_some() {
             return Ok(Statement::Block {
                 statements: self.parse_block()?,
             });
         }
         self.parse_expression_statement()
+    }
+
+    fn parse_if_statement(&mut self) -> Result<Statement, ParserError> {
+        self.consume(
+            TokenType::LeftParen,
+            ParserError::MissingOpeningParenthesisIf { line: 0 },
+        )?;
+        let condition = self.parse_expression()?;
+        self.consume(
+            TokenType::RightParen,
+            ParserError::MissingClosingParenthesisCondition { line: 0 },
+        )?;
+        let then_branch = self.parse_statement()?;
+
+        let mut else_branch_box = None;
+        if self.match_current(&vec![TokenType::Else]).is_some() {
+            else_branch_box = Some(Box::new(self.parse_statement()?));
+        }
+        Ok(Statement::IfStatement {
+            condition,
+            then_branch: Box::new(then_branch),
+            else_branch: else_branch_box,
+        })
+    }
+    fn parse_while_statement(&mut self) -> Result<Statement, ParserError> {
+        self.consume(
+            TokenType::LeftParen,
+            ParserError::MissingOpeningParenthesisWhile { line: 0 },
+        )?;
+        let condition = self.parse_expression()?;
+        self.consume(
+            TokenType::RightParen,
+            ParserError::MissingClosingParenthesisCondition { line: 0 },
+        )?;
+        let body = self.parse_statement()?;
+        Ok(Statement::WhileStatement {
+            condition,
+            body: Box::new(body),
+        })
     }
 
     fn parse_block(&mut self) -> Result<Vec<Statement>, ParserError> {

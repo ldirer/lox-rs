@@ -2,12 +2,30 @@ use std::fmt::{Display, Formatter};
 
 #[derive(Debug, PartialEq)]
 pub enum Statement {
-    VarDeclaration { name: String, initializer: Expr },
-    Block { statements: Vec<Statement> },
-    ExprStatement { expression: Expr },
+    IfStatement {
+        condition: Expr,
+        then_branch: Box<Statement>,
+        else_branch: Option<Box<Statement>>,
+    },
+    WhileStatement {
+        condition: Expr,
+        body: Box<Statement>,
+    },
+    VarDeclaration {
+        name: String,
+        initializer: Expr,
+    },
+    Block {
+        statements: Vec<Statement>,
+    },
+    ExprStatement {
+        expression: Expr,
+    },
     // reminder that this is a statement (and not a library function) so that we can get some lox
     // code running before our interpreter handles functions (comes later in the book).
-    PrintStatement { expression: Expr },
+    PrintStatement {
+        expression: Expr,
+    },
 }
 #[derive(Debug, PartialEq)]
 pub enum Expr {
