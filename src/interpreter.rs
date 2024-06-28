@@ -115,10 +115,9 @@ fn interpret_statement(
             }
         }
         Statement::WhileStatement { condition, body } => {
-            let cond = interpret_expression(condition, environment.clone())?;
             // it's weird to gather all commands before evaluating them... Creates a delay we don't really want!!
             let mut commands = vec![];
-            while is_truthy(&cond) {
+            while is_truthy(&interpret_expression(condition, environment.clone())?) {
                 commands.extend(interpret_statement(body, environment.clone())?);
             }
             Ok(commands)

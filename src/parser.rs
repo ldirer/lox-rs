@@ -17,6 +17,8 @@ pub enum ParserError {
     MissingSemicolonPrint { line: usize },
     #[error("line: {line}. Expected ';' after expression.")]
     MissingSemicolonExpressionStatement { line: usize },
+    #[error("line: {line}. Expected ';' after loop condition.")]
+    MissingSemicolonLoopCondition { line: i32 },
     #[error("line: {line}. invalid syntax for variable declaration.")]
     InvalidSyntaxVarDeclaration { line: usize },
     #[error("line: {line}. Expected ';' after variable declaration.")]
@@ -32,6 +34,10 @@ pub enum ParserError {
     MissingClosingParenthesisCondition { line: usize },
     #[error("line: {line}. Missing '(' after 'if'.")]
     MissingOpeningParenthesisIf { line: i32 },
+    #[error("line: {line}. Missing '(' after 'for'.")]
+    MissingOpeningParenthesisFor { line: i32 },
+    #[error("line: {line}. Missing ')' after 'for' clauses.")]
+    MissingClosingParenthesisFor { line: i32 },
 }
 pub struct Parser<T: Iterator<Item = Token>> {
     tokens: Peekable<T>,
@@ -96,6 +102,10 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         if self.match_current(&vec![TokenType::Print]).is_some() {
             return self.parse_print_statement();
         }
+
+        if self.match_current(&vec![TokenType::For]).is_some() {
+            return self.parse_for_statement();
+        }
         if self.match_current(&vec![TokenType::If]).is_some() {
             return self.parse_if_statement();
         }
@@ -109,6 +119,65 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             });
         }
         self.parse_expression_statement()
+    }
+    /// all of these are allowed. Omitted condition implies 'true'
+    /// for (var i = 0; i < 10; i = i + 1) print i;
+    /// for (; i < 10; i = i + 1) print i;
+    /// for (; i < 10; i = i + 1) print i;
+    /// for (; ; i = i + 1) print i;
+    /// for (; ; ) print i;
+    fn parse_for_statement(&mut self) -> Result<Statement, ParserError> {
+        self.consume(
+            TokenType::LeftParen,
+            ParserError::MissingOpeningParenthesisFor { line: 0 },
+        )?;
+        let initializer = if self.match_current(&vec![TokenType::Semicolon]).is_some() {
+            None
+        } else if self.match_current(&vec![TokenType::Var]).is_some() {
+            Some(self.parse_var_declaration()?)
+        } else {
+            Some(self.parse_expression_statement()?)
+        };
+
+        let mut condition = None;
+        if self.match_current(&vec![TokenType::Semicolon]).is_none() {
+            condition = Some(self.parse_expression()?);
+        }
+        self.consume(
+            TokenType::Semicolon,
+            ParserError::MissingSemicolonLoopCondition { line: 0 },
+        )?;
+
+        let mut increment = None;
+        if self.match_current(&vec![TokenType::RightParen]).is_none() {
+            increment = Some(self.parse_expression()?);
+        }
+        self.consume(
+            TokenType::RightParen,
+            ParserError::MissingClosingParenthesisFor { line: 0 },
+        )?;
+
+        let for_body: Statement = self.parse_statement()?;
+
+        let mut while_body_statements = vec![for_body];
+        if let Some(increment_expr) = increment {
+            while_body_statements.push(Statement::ExprStatement {
+                expression: increment_expr,
+            });
+        }
+
+        let while_statement = Statement::WhileStatement {
+            condition: condition.unwrap_or(Expr::Literal(Literal::True)),
+            body: Box::new(Statement::Block {
+                statements: while_body_statements,
+            }),
+        };
+        let mut statements: Vec<Statement> = vec![initializer, Some(while_statement)]
+            .into_iter()
+            .filter_map(|s| s)
+            .collect();
+
+        Ok(Statement::Block { statements })
     }
 
     fn parse_if_statement(&mut self) -> Result<Statement, ParserError> {
