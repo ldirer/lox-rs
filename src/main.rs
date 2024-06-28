@@ -7,7 +7,7 @@ use std::{env, io};
 
 use thiserror::Error;
 
-use crate::interpreter::interpret_program;
+use crate::interpreter::Interpreter;
 use crate::parser::parse;
 use crate::scanner::{tokenize, ScanningError};
 
@@ -82,8 +82,10 @@ fn run(source: String) {
     // passing a 'handle error' callback to stick to the book.
     let tokens = tokenize(source, scanner_error);
     let parsed = parse(tokens.into_iter());
+    let stdout_binding = std::io::stdout();
+    let mut interpreter = Interpreter::new(stdout_binding);
     match parsed {
-        Ok(statements) => match interpret_program(&statements, &mut std::io::stdout()) {
+        Ok(statements) => match interpreter.interpret_program(&statements) {
             Ok(_) => {}
             Err(err) => println!("Interpreter error: {err}"),
         },
