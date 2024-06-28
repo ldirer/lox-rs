@@ -39,7 +39,11 @@ impl<T: Clone> Environment<T> {
             return value.clone();
         }
         match &self.parent {
-            None => panic!("oh no lookup failed :o!"),
+            None => panic!(
+                "oh no lookup failed :o! Variable {} not found in scope. \nHere's all we got: {:#?}",
+                name,
+                self.bindings.keys()
+            ),
             Some(parent_env) => parent_env.borrow().lookup(name),
         }
     }

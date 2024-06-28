@@ -1,0 +1,19 @@
+// finalexam.lox
+//
+// This example illustrates the most egrecious of all programming
+// mistakes that one could make in a "Programming Languages" course.
+// Resulting in you getting an F for the semester.
+
+var x = 1;
+
+fun f() {
+    var y = 2;
+    g();
+}
+
+fun g() {
+    print x + y;    // This had better error!
+    print "YOU HAVE FAILED!";
+}
+
+f();
