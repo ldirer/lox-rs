@@ -1,4 +1,4 @@
-use crate::ast::{BinaryOperator, Expr, Literal, Statement, UnaryOperator};
+use crate::ast::{BinaryLogicalOperator, BinaryOperator, Expr, Literal, Statement, UnaryOperator};
 use crate::environment::Environment;
 use crate::interpreter::LoxValue::*;
 use std::cell::RefCell;
@@ -134,6 +134,30 @@ fn interpret_expression(
             // there's probably something wrong here about cloning if the value is mutable.
             Ok(left_hand_side)
         }
+        Expr::BinaryLogical {
+            operator: BinaryLogicalOperator::Or,
+            left,
+            right,
+        } => {
+            let lox_left_value = interpret_expression(left, environment.clone())?;
+            if is_truthy(&lox_left_value) {
+                return Ok(lox_left_value);
+            }
+            let lox_right_value = interpret_expression(right, environment.clone())?;
+            return Ok(lox_right_value);
+        }
+        Expr::BinaryLogical {
+            operator: BinaryLogicalOperator::And,
+            left,
+            right,
+        } => {
+            let lox_left_value = interpret_expression(left, environment.clone())?;
+            if !is_truthy(&lox_left_value) {
+                return Ok(lox_left_value);
+            }
+            let lox_right_value = interpret_expression(right, environment.clone())?;
+            return Ok(lox_right_value);
+        }
     }
 }
 
@@ -177,7 +201,7 @@ fn is_equal(left: LoxValue, right: LoxValue) -> bool {
 fn interpret_unary(op: &UnaryOperator, operand: LoxValue) -> Result<LoxValue, InterpreterError> {
     match (op, operand) {
         (UnaryOperator::Minus, LNumber(num)) => Ok(LNumber(-num)),
-        (UnaryOperator::Not, lox_value) => Ok(LBool(!truthy(lox_value))),
+        (UnaryOperator::Not, lox_value) => Ok(LBool(!is_truthy(&lox_value))),
         (_, operand) => Err(InterpreterError::UnaryOperationNotSupported {
             operator: *op,
             operand,
@@ -185,10 +209,10 @@ fn interpret_unary(op: &UnaryOperator, operand: LoxValue) -> Result<LoxValue, In
     }
 }
 
-fn truthy(v: LoxValue) -> bool {
+fn is_truthy(v: &LoxValue) -> bool {
     match v {
         LNil => false,
-        LBool(value) => value,
+        LBool(value) => *value,
         _ => true,
     }
 }
@@ -283,6 +307,22 @@ mod tests {
         let lox_value = get_lox_value("\"Hello\" + \", \" + \"World!\"");
         assert_eq!(lox_value, LoxValue::LString("Hello, World!".to_string()))
     }
+
+    #[test]
+    fn test_interpret_expression_logical_operations() {
+        let lox_value = get_lox_value("nil or \"Hello\"");
+        assert_eq!(lox_value, LoxValue::LString("Hello".to_string()));
+
+        let lox_value = get_lox_value("\"Hello\" or 2");
+        assert_eq!(lox_value, LoxValue::LString("Hello".to_string()));
+
+        let lox_value = get_lox_value("\"Hello\" and 2");
+        assert_eq!(lox_value, LoxValue::LNumber(2.));
+
+        let lox_value = get_lox_value("false and 2");
+        assert_eq!(lox_value, LoxValue::LBool(false));
+    }
+
     #[test]
     fn test_interpret_expression_invalid_operation() {
         let lox_error = get_lox_error("true + 1");

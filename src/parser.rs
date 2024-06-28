@@ -2,7 +2,7 @@ use std::iter::Peekable;
 
 use thiserror::Error;
 
-use crate::ast::{BinaryOperator, Expr, Literal, Statement, UnaryOperator};
+use crate::ast::{BinaryLogicalOperator, BinaryOperator, Expr, Literal, Statement, UnaryOperator};
 use crate::token::{Token, TokenType};
 
 #[derive(Debug, Error, PartialEq)]
@@ -137,7 +137,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     fn parse_assignment(&mut self) -> Result<Expr, ParserError> {
-        let expr = self.parse_equality()?;
+        let expr = self.parse_logical_or()?;
         match (self.match_current(&vec![TokenType::Equal]), &expr) {
             (None, _) => Ok(expr),
             (Some(_), Expr::Variable { name }) => {
@@ -149,6 +149,31 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             }
             (Some(token), _) => Err(ParserError::InvalidAssignmentTarget { line: token.line }),
         }
+    }
+
+    fn parse_logical_or(&mut self) -> Result<Expr, ParserError> {
+        let mut expr = self.parse_logical_and()?;
+        while let Some(token) = self.match_current(&vec![TokenType::Or]) {
+            let right = self.parse_logical_and()?;
+            expr = Expr::BinaryLogical {
+                operator: BinaryLogicalOperator::Or,
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
+    }
+    fn parse_logical_and(&mut self) -> Result<Expr, ParserError> {
+        let mut expr = self.parse_equality()?;
+        while let Some(token) = self.match_current(&vec![TokenType::And]) {
+            let right = self.parse_equality()?;
+            expr = Expr::BinaryLogical {
+                operator: BinaryLogicalOperator::And,
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
     }
 
     fn parse_equality(&mut self) -> Result<Expr, ParserError> {
@@ -380,7 +405,10 @@ fn token_to_binary(token: Token) -> BinaryOperator {
 mod tests {
     use crate::ast::Literal::Number;
     use crate::ast::Statement::ExprStatement;
-    use crate::ast::{format_lisp_like, BinaryOperator, Expr, Literal, Statement, UnaryOperator};
+    use crate::ast::{
+        format_lisp_like, BinaryLogicalOperator, BinaryOperator, Expr, Literal, Statement,
+        UnaryOperator,
+    };
     use crate::parser::{Parser, ParserError};
     use crate::test_helpers::{parse_expr, parse_program, parse_statement};
     use crate::token::{Token, TokenType};
@@ -407,6 +435,19 @@ mod tests {
             expr,
             Expr::Binary {
                 operator: BinaryOperator::Plus,
+                left: Box::new(Expr::Literal(Literal::Number(1.),)),
+                right: Box::new(Expr::Literal(Literal::Number(2.),))
+            }
+        )
+    }
+
+    #[test]
+    fn test_binary_logical() {
+        let expr = parse_expr("1 or 2").unwrap();
+        assert_eq!(
+            expr,
+            Expr::BinaryLogical {
+                operator: BinaryLogicalOperator::Or,
                 left: Box::new(Expr::Literal(Literal::Number(1.),)),
                 right: Box::new(Expr::Literal(Literal::Number(2.),))
             }

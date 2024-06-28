@@ -15,6 +15,11 @@ pub enum Expr {
         name: String,
         value: Box<Expr>,
     },
+    BinaryLogical {
+        operator: BinaryLogicalOperator,
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
     Literal(Literal),
     Unary {
         operator: UnaryOperator,
@@ -43,7 +48,19 @@ impl Display for UnaryOperator {
         }
     }
 }
-
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum BinaryLogicalOperator {
+    Or,
+    And,
+}
+impl Display for BinaryLogicalOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BinaryLogicalOperator::Or => write!(f, "or"),
+            BinaryLogicalOperator::And => write!(f, "and"),
+        }
+    }
+}
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum BinaryOperator {
     Plus,
@@ -127,6 +144,16 @@ pub fn format_lisp_like(expr: &Expr) -> String {
         Expr::Assign { .. } => {
             panic!("Assign not supported")
         }
+        Expr::BinaryLogical {
+            operator,
+            left,
+            right,
+        } => format!(
+            "({} {} {})",
+            operator,
+            format_reverse_polish_notation(left),
+            format_reverse_polish_notation(right),
+        ),
     }
 }
 
@@ -157,6 +184,16 @@ pub fn format_reverse_polish_notation(expr: &Expr) -> String {
                 operator,
             )
         }
+        Expr::BinaryLogical {
+            operator,
+            left,
+            right,
+        } => format!(
+            "{} {} {}",
+            format_reverse_polish_notation(left),
+            format_reverse_polish_notation(right),
+            operator
+        ),
         Expr::Grouping(expr) => {
             format!("{}", format_reverse_polish_notation(expr))
         }
