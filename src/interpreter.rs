@@ -122,6 +122,9 @@ fn interpret_statement(
             }
             Ok(commands)
         }
+        Statement::FunctionDeclaration { .. } => {
+            todo!()
+        }
     }
 }
 
@@ -180,6 +183,9 @@ fn interpret_expression(
             }
             let lox_right_value = interpret_expression(right, environment.clone())?;
             return Ok(lox_right_value);
+        }
+        Expr::FunctionCall { .. } => {
+            todo!()
         }
     }
 }

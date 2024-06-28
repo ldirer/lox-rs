@@ -15,6 +15,11 @@ pub enum Statement {
         name: String,
         initializer: Expr,
     },
+    FunctionDeclaration {
+        name: String,
+        parameters: Vec<String>,
+        body: Vec<Statement>,
+    },
     Block {
         statements: Vec<Statement>,
     },
@@ -51,6 +56,10 @@ pub enum Expr {
     Grouping(Box<Expr>),
     Variable {
         name: String,
+    },
+    FunctionCall {
+        callee: Box<Expr>,
+        arguments: Vec<Expr>,
     },
 }
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -172,6 +181,10 @@ pub fn format_lisp_like(expr: &Expr) -> String {
             format_reverse_polish_notation(left),
             format_reverse_polish_notation(right),
         ),
+        // tired of having to come here and change this code that I don't use much, so adding a default case.
+        _ => {
+            panic!("not supported {expr:?}")
+        }
     }
 }
 
@@ -220,6 +233,9 @@ pub fn format_reverse_polish_notation(expr: &Expr) -> String {
         }
         Expr::Assign { .. } => {
             panic!("Assign not supported")
+        }
+        _ => {
+            panic!("not supported {expr:?}")
         }
     }
 }

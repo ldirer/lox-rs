@@ -5,11 +5,11 @@ use std::path::Path;
 use std::process::exit;
 use std::{env, io};
 
-use crate::ast::Statement;
-use crate::interpreter::interpret_program;
-use crate::parser::{parse, ParserError};
-use crate::scanner::{tokenize, ScanningError};
 use thiserror::Error;
+
+use crate::interpreter::interpret_program;
+use crate::parser::parse;
+use crate::scanner::{tokenize, ScanningError};
 
 mod ast;
 mod environment;

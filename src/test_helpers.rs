@@ -1,8 +1,6 @@
 use crate::ast::{Expr, Statement};
 use crate::parser::{Parser, ParserError};
 use crate::scanner::tokenize;
-use crate::token::Token;
-use std::vec::IntoIter;
 
 // Unfortunately to have these functions here I had to make a lot of things 'public'.
 // Not a huge deal but does not feel very clean.

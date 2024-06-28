@@ -2,7 +2,6 @@ use std::iter::Peekable;
 
 use thiserror::Error;
 
-use crate::ast::Statement::WhileStatement;
 use crate::ast::{BinaryLogicalOperator, BinaryOperator, Expr, Literal, Statement, UnaryOperator};
 use crate::token::{Token, TokenType};
 
@@ -38,6 +37,20 @@ pub enum ParserError {
     MissingOpeningParenthesisFor { line: i32 },
     #[error("line: {line}. Missing ')' after 'for' clauses.")]
     MissingClosingParenthesisFor { line: i32 },
+    #[error("line: {line}. Missing ')' after call arguments.")]
+    MissingClosingParenthesisInCall { line: i32 },
+    #[error("line: {line}. Expected function name.")]
+    FunctionIdentifierExpected { line: i32 },
+    #[error("line: {line}. Expected '(' after function name.")]
+    MissingOpeningParenthesisFunction { line: i32 },
+    #[error("line: {line}. Expected function parameter identifier.")]
+    FunctionExpectedParameterName { line: i32 },
+    #[error("line: {line}. Expected ')' after function parameters.")]
+    MissingClosingParenthesisFunction { line: i32 },
+    #[error("line: {line}. Expected '{{' to begin function body.")]
+    MissingOpeningBraceFunction { line: i32 },
+    #[error("line: {line}. Expected '}}' to close function body.")]
+    MissingClosingBraceFunction { line: i32 },
 }
 pub struct Parser<T: Iterator<Item = Token>> {
     tokens: Peekable<T>,
@@ -67,10 +80,66 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     pub fn parse_declaration(&mut self) -> Result<Statement, ParserError> {
+        if self.match_current(&vec![TokenType::Fun]).is_some() {
+            return self.parse_function_declaration();
+        }
         match self.match_current(&vec![TokenType::Var]) {
             Some(_) => self.parse_var_declaration(),
             None => self.parse_statement(),
         }
+    }
+
+    fn parse_function_declaration(&mut self) -> Result<Statement, ParserError> {
+        let name = self
+            .consume(
+                TokenType::Identifier,
+                ParserError::FunctionIdentifierExpected { line: 0 },
+            )?
+            .lexeme;
+        self.consume(
+            TokenType::LeftParen,
+            ParserError::MissingOpeningParenthesisFunction { line: 0 },
+        )?;
+        let mut parameters = vec![];
+        if self
+            .tokens
+            .peek()
+            .is_some_and(|t| t.r#type != TokenType::RightParen)
+        {
+            loop {
+                // note there is no limit on the number of parameters for now (the book sets a 255 max)
+                let token = self.match_current(&vec![TokenType::Identifier]);
+                match token {
+                    None => return Err(ParserError::FunctionExpectedParameterName { line: 0 }),
+                    Some(t) => {
+                        parameters.push(t.lexeme);
+                    }
+                }
+                if self.match_current(&vec![TokenType::Comma]).is_none() {
+                    break;
+                }
+            }
+        }
+
+        self.consume(
+            TokenType::RightParen,
+            ParserError::MissingClosingParenthesisFunction { line: 0 },
+        )?;
+        self.consume(
+            TokenType::LeftBrace,
+            ParserError::MissingOpeningBraceFunction { line: 0 },
+        )?;
+        let body = self.parse_block()?;
+        self.consume(
+            TokenType::RightBrace,
+            ParserError::MissingClosingBraceFunction { line: 0 },
+        )?;
+
+        Ok(Statement::FunctionDeclaration {
+            parameters,
+            body,
+            name,
+        })
     }
 
     fn parse_var_declaration(&mut self) -> Result<Statement, ParserError> {
@@ -114,9 +183,12 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             return self.parse_while_statement();
         }
         if self.match_current(&vec![TokenType::LeftBrace]).is_some() {
-            return Ok(Statement::Block {
+            let block = Statement::Block {
                 statements: self.parse_block()?,
-            });
+            };
+            let line = self.tokens.peek().unwrap().line;
+            self.consume(TokenType::RightBrace, ParserError::UnclosedBlock { line })?;
+            return Ok(block);
         }
         self.parse_expression_statement()
     }
@@ -172,7 +244,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 statements: while_body_statements,
             }),
         };
-        let mut statements: Vec<Statement> = vec![initializer, Some(while_statement)]
+        let statements: Vec<Statement> = vec![initializer, Some(while_statement)]
             .into_iter()
             .filter_map(|s| s)
             .collect();
@@ -229,8 +301,6 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         {
             statements.push(self.parse_declaration()?);
         }
-        let line = self.tokens.peek().unwrap().line;
-        self.consume(TokenType::RightBrace, ParserError::UnclosedBlock { line })?;
         Ok(statements)
     }
 
@@ -276,7 +346,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
     fn parse_logical_or(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.parse_logical_and()?;
-        while let Some(token) = self.match_current(&vec![TokenType::Or]) {
+        while self.match_current(&vec![TokenType::Or]).is_some() {
             let right = self.parse_logical_and()?;
             expr = Expr::BinaryLogical {
                 operator: BinaryLogicalOperator::Or,
@@ -288,7 +358,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
     fn parse_logical_and(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.parse_equality()?;
-        while let Some(token) = self.match_current(&vec![TokenType::And]) {
+        while self.match_current(&vec![TokenType::And]).is_some() {
             let right = self.parse_equality()?;
             expr = Expr::BinaryLogical {
                 operator: BinaryLogicalOperator::And,
@@ -371,7 +441,33 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 expression: Box::new(operand),
             });
         }
-        self.parse_primary()
+        self.parse_call()
+    }
+
+    fn parse_call(&mut self) -> Result<Expr, ParserError> {
+        let mut expr = self.parse_primary()?;
+        while self.match_current(&vec![TokenType::LeftParen]).is_some() {
+            let mut args = vec![];
+            if self
+                .tokens
+                .peek()
+                .is_some_and(|t| t.r#type != TokenType::RightParen)
+            {
+                args.push(self.parse_expression()?);
+                while self.match_current(&vec![TokenType::Comma]).is_some() {
+                    args.push(self.parse_expression()?);
+                }
+            }
+            self.consume(
+                TokenType::RightParen,
+                ParserError::MissingClosingParenthesisInCall { line: 0 },
+            )?;
+            expr = Expr::FunctionCall {
+                callee: Box::new(expr),
+                arguments: args,
+            };
+        }
+        Ok(expr)
     }
 
     fn parse_primary(&mut self) -> Result<Expr, ParserError> {
@@ -427,10 +523,10 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         token
     }
 
-    fn consume(&mut self, token_type: TokenType, err: ParserError) -> Result<(), ParserError> {
+    fn consume(&mut self, token_type: TokenType, err: ParserError) -> Result<Token, ParserError> {
         match self.match_current(&vec![token_type]) {
             None => Err(err),
-            Some(_) => Ok(()),
+            Some(t) => Ok(t),
         }
     }
 
@@ -663,6 +759,27 @@ mod tests {
         assert_eq!(parsed.len(), 1);
     }
     #[test]
+    fn test_function_declaration_no_return() {
+        let parsed = parse_program("fun fibonacci(n, debug) { n + 1;}").unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(
+            parsed[0],
+            Statement::FunctionDeclaration {
+                name: "fibonacci".to_string(),
+                parameters: vec!["n".to_string(), "debug".to_string()],
+                body: vec![ExprStatement {
+                    expression: Expr::Binary {
+                        operator: BinaryOperator::Plus,
+                        left: Box::from(Expr::Variable {
+                            name: "n".to_string()
+                        }),
+                        right: Box::from(Expr::Literal(Number(1.0)))
+                    }
+                }]
+            }
+        );
+    }
+    #[test]
     fn test_variable_expression() {
         // this is valid at this stage, the parser allows undefined variables (interpreter would throw a runtime error)
         let parsed = parse_program("a + b == 3;").unwrap();
@@ -679,6 +796,23 @@ mod tests {
                     value: Box::from(Expr::Literal(Number(3.))),
                     name: "a".to_string()
                 }
+            }
+        );
+    }
+
+    #[test]
+    fn test_function_call() {
+        let parsed = parse_expr("caller(1, 2)").unwrap();
+        assert_eq!(
+            parsed,
+            Expr::FunctionCall {
+                callee: Box::from(Expr::Variable {
+                    name: "caller".to_string()
+                }),
+                arguments: vec![
+                    Expr::Literal(Literal::Number(1.)),
+                    Expr::Literal(Literal::Number(2.))
+                ],
             }
         );
     }
