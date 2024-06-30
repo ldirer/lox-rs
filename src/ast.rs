@@ -20,6 +20,9 @@ pub enum Statement {
         parameters: Vec<String>,
         body: Vec<Statement>,
     },
+    ReturnStatement {
+        expression: Expr,
+    },
     Block {
         statements: Vec<Statement>,
     },

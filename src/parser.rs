@@ -2,6 +2,7 @@ use std::iter::Peekable;
 
 use thiserror::Error;
 
+use crate::ast::Statement::ReturnStatement;
 use crate::ast::{BinaryLogicalOperator, BinaryOperator, Expr, Literal, Statement, UnaryOperator};
 use crate::token::{Token, TokenType};
 
@@ -171,6 +172,9 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         if self.match_current(&vec![TokenType::Print]).is_some() {
             return self.parse_print_statement();
         }
+        if self.match_current(&vec![TokenType::Return]).is_some() {
+            return self.parse_return_statement();
+        }
 
         if self.match_current(&vec![TokenType::For]).is_some() {
             return self.parse_for_statement();
@@ -312,6 +316,22 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             None => Err(ParserError::MissingSemicolonPrint { line: 0 }),
             Some(_) => Ok(Statement::PrintStatement { expression: expr }),
         }
+    }
+
+    fn parse_return_statement(&mut self) -> Result<Statement, ParserError> {
+        let mut expr = Expr::Literal(Literal::Nil);
+        if self
+            .tokens
+            .peek()
+            .is_some_and(|t| t.r#type != TokenType::Semicolon)
+        {
+            expr = self.parse_expression()?;
+        }
+        self.consume(
+            TokenType::Semicolon,
+            ParserError::MissingSemicolonExpressionStatement { line: 0 },
+        )?;
+        return Ok(ReturnStatement { expression: expr });
     }
 
     fn parse_expression_statement(&mut self) -> Result<Statement, ParserError> {
@@ -623,7 +643,7 @@ fn token_to_binary(token: Token) -> BinaryOperator {
 #[cfg(test)]
 mod tests {
     use crate::ast::Literal::Number;
-    use crate::ast::Statement::ExprStatement;
+    use crate::ast::Statement::{ExprStatement, ReturnStatement};
     use crate::ast::{
         format_lisp_like, BinaryLogicalOperator, BinaryOperator, Expr, Literal, Statement,
         UnaryOperator,
@@ -759,15 +779,15 @@ mod tests {
         assert_eq!(parsed.len(), 1);
     }
     #[test]
-    fn test_function_declaration_no_return() {
-        let parsed = parse_program("fun fibonacci(n, debug) { n + 1;}").unwrap();
+    fn test_function_declaration() {
+        let parsed = parse_program("fun fibonacci(n, debug) { return n + 1;}").unwrap();
         assert_eq!(parsed.len(), 1);
         assert_eq!(
             parsed[0],
             Statement::FunctionDeclaration {
                 name: "fibonacci".to_string(),
                 parameters: vec!["n".to_string(), "debug".to_string()],
-                body: vec![ExprStatement {
+                body: vec![ReturnStatement {
                     expression: Expr::Binary {
                         operator: BinaryOperator::Plus,
                         left: Box::from(Expr::Variable {

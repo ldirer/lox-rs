@@ -92,36 +92,42 @@ impl<W: Write> Interpreter<W> {
         }
         Ok(())
     }
+
+    /// Ok(Some(value)) signals the return of a function, so we know to stop executing the current
+    /// function body.
     fn interpret_statement(
         &mut self,
         statement: &Statement,
         environment: Rc<RefCell<LoxEnvironment>>,
-    ) -> Result<(), InterpreterError> {
+    ) -> Result<Option<LoxValue>, InterpreterError> {
         match statement {
             Statement::ExprStatement { expression } => {
                 self.interpret_expression(expression, environment.clone())?;
-                Ok(())
+                Ok(None)
             }
             Statement::PrintStatement { expression } => {
                 let value = self.interpret_expression(expression, environment.clone())?;
                 writeln!(self.writer, "{:?}", value).unwrap();
-                Ok(())
+                Ok(None)
             }
             Statement::VarDeclaration { name, initializer } => {
                 environment.borrow_mut().define(
                     name.clone(),
                     self.interpret_expression(initializer, environment.clone())?,
                 );
-                Ok(())
+                Ok(None)
             }
             Statement::Block { statements } => {
                 let mut child_env = LoxEnvironment::new(None);
                 child_env.parent = Some(environment.clone());
                 let child_env = Rc::new(RefCell::new(child_env));
                 for statement in statements {
-                    self.interpret_statement(statement, child_env.clone())?;
+                    let return_value = self.interpret_statement(statement, child_env.clone())?;
+                    if !return_value.is_none() {
+                        return Ok(return_value);
+                    }
                 }
-                Ok(())
+                Ok(None)
             }
             Statement::IfStatement {
                 condition,
@@ -135,14 +141,17 @@ impl<W: Write> Interpreter<W> {
                     if let Some(branch) = else_branch {
                         return self.interpret_statement(branch, environment.clone());
                     }
-                    Ok(())
+                    Ok(None)
                 }
             }
             Statement::WhileStatement { condition, body } => {
                 while is_truthy(&self.interpret_expression(condition, environment.clone())?) {
-                    self.interpret_statement(body, environment.clone())?;
+                    let return_value = self.interpret_statement(body, environment.clone())?;
+                    if !return_value.is_none() {
+                        return Ok(return_value);
+                    }
                 }
-                Ok(())
+                Ok(None)
             }
             Statement::FunctionDeclaration {
                 name,
@@ -158,7 +167,11 @@ impl<W: Write> Interpreter<W> {
                         environment: environment.clone(),
                     }),
                 );
-                Ok(())
+                Ok(None)
+            }
+            Statement::ReturnStatement { expression } => {
+                let lox_value = self.interpret_expression(expression, environment.clone())?;
+                Ok(Some(lox_value))
             }
         }
     }
@@ -231,8 +244,7 @@ impl<W: Write> Interpreter<W> {
                 if let Err(err) = args {
                     return Err(err);
                 }
-                self.interpret_call(&lox_func, args.unwrap())?;
-                Ok(LoxValue::LNil)
+                self.interpret_call(&lox_func, args.unwrap())
             }
         }
     }
@@ -269,7 +281,7 @@ impl<W: Write> Interpreter<W> {
         &mut self,
         value: &LoxValue,
         arguments: Vec<LoxValue>,
-    ) -> Result<(), InterpreterError> {
+    ) -> Result<LoxValue, InterpreterError> {
         match value {
             LFunc(lox_function) => self.interpret_function_call(lox_function, arguments),
             _ => panic!("cannot call this value {:?}", value),
@@ -280,7 +292,7 @@ impl<W: Write> Interpreter<W> {
         &mut self,
         lox_func: &LoxFunction,
         arguments: Vec<LoxValue>,
-    ) -> Result<(), InterpreterError> {
+    ) -> Result<LoxValue, InterpreterError> {
         if lox_func.parameters.len() != arguments.len() {
             panic!("lox interpreter: number of arguments did not match number of parameters for function {:?}", lox_func.name);
         }
@@ -307,9 +319,13 @@ impl<W: Write> Interpreter<W> {
         // }
 
         for statement in &lox_func.body {
-            self.interpret_statement(statement, child_env.clone())?;
+            let return_value = self.interpret_statement(statement, child_env.clone())?;
+            if let Some(v) = return_value {
+                return Ok(v);
+            }
         }
-        Ok(())
+        // implicit returned value is nil
+        Ok(LoxValue::LNil)
     }
 
     fn interpret_unary(
@@ -482,6 +498,21 @@ mod tests {
             String::from_utf8(interpreter.writer).unwrap(),
             format!("{:?}\n", LoxValue::LString("Hello".to_string()))
         )
+    }
+
+    #[test]
+    fn test_interpret_return_statement() {
+        let mock_writer: Vec<u8> = Vec::new();
+        let mut interpreter = Interpreter::new(mock_writer);
+        let program = parse_program("fun f() { return \"Hello\";} \nprint f();")
+            .expect("error in test setup");
+        let env = LoxEnvironment::new(None);
+
+        interpreter.interpret_program(&program).unwrap();
+        assert_eq!(
+            String::from_utf8(interpreter.writer).unwrap(),
+            format!("{:?}\n", LoxValue::LString("Hello".to_string()))
+        );
     }
 
     #[test]
