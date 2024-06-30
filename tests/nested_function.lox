@@ -1,0 +1,12 @@
+fun make_adder(a) {
+
+    fun adder(b) {
+        return a + b;
+    }
+    return adder;
+}
+
+var f = make_adder(100);
+var g = make_adder(1000);
+print f(1);
+print g(1);

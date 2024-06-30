@@ -111,10 +111,8 @@ impl<W: Write> Interpreter<W> {
                 Ok(None)
             }
             Statement::VarDeclaration { name, initializer } => {
-                environment.borrow_mut().define(
-                    name.clone(),
-                    self.interpret_expression(initializer, environment.clone())?,
-                );
+                let value = self.interpret_expression(initializer, environment.clone())?;
+                environment.borrow_mut().define(name.clone(), value);
                 Ok(None)
             }
             Statement::Block { statements } => {

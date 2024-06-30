@@ -1,15 +1,15 @@
-use std::{env, io};
 use std::fmt::Debug;
 use std::fs::read_to_string;
 use std::io::Write;
 use std::path::Path;
 use std::process::exit;
+use std::{env, io};
 
 use thiserror::Error;
 
 use crate::interpreter::Interpreter;
 use crate::parser::parse;
-use crate::scanner::{ScanningError, tokenize};
+use crate::scanner::{tokenize, ScanningError};
 
 mod ast;
 mod environment;
