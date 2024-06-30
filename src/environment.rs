@@ -16,7 +16,12 @@ impl<T: Clone> Environment<T> {
         }
     }
     pub fn define(&mut self, name: String, value: T) {
-        // Lox allows redefining a variable
+        if self.bindings.contains_key(&name) {
+            panic!(
+                "a variable with this name ({}) already exists in this scope",
+                name
+            );
+        }
         self.bindings.insert(name, value);
     }
 
@@ -71,12 +76,20 @@ mod tests {
         let mut environment = Environment::<i32>::new(None);
         environment.define("a".to_string(), 1);
         assert_eq!(environment.lookup("a".to_string()), 1);
-        // redefine
-        environment.define("a".to_string(), 2);
-        assert_eq!(environment.lookup("a".to_string()), 2);
         // change value
         environment.assign("a".to_string(), 3);
         assert_eq!(environment.lookup("a".to_string()), 3);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_redefine() {
+        let mut environment = Environment::<i32>::new(None);
+        environment.define("a".to_string(), 1);
+        assert_eq!(environment.lookup("a".to_string()), 1);
+        // redefine
+        environment.define("a".to_string(), 2);
+        assert_eq!(environment.lookup("a".to_string()), 2);
     }
 
     #[test]

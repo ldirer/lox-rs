@@ -33,7 +33,6 @@ fn main() -> Result<(), color_eyre::eyre::Error> {
     color_eyre::install()?;
 
     let args: Vec<String> = env::args().collect();
-    dbg!(args.join(" "));
     if args.len() > 2 {
         println!("Too many arguments received ({})", args.len());
         println!("Usage: rlox [script]");

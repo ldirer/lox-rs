@@ -1,0 +1,9 @@
+// jlox returns an error with this code... even if the function is not called!
+// no idea how that happens!..
+
+ fun scope(a) {
+     var a = "local";
+ }
+
+//scope(1);
+print "uh?";

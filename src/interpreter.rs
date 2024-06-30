@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::fmt::{Debug, Formatter, Pointer};
+use std::fmt::{Debug, Display, Formatter, Pointer};
 use std::io::Write;
 use std::iter::zip;
 use std::rc::Rc;
@@ -37,6 +37,18 @@ enum LoxValue {
     LNumber(f64),
     LBool(bool),
     LNil,
+}
+
+impl Display for LoxValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LFunc(func) => write!(f, "fun {}\n", func.name),
+            LString(s) => write!(f, "{}", s),
+            LNumber(n) => write!(f, "{}", n),
+            LBool(b) => write!(f, "{}", b),
+            LNil => write!(f, "nil"),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -107,7 +119,7 @@ impl<W: Write> Interpreter<W> {
             }
             Statement::PrintStatement { expression } => {
                 let value = self.interpret_expression(expression, environment.clone())?;
-                writeln!(self.writer, "{:?}", value).unwrap();
+                writeln!(self.writer, "{}", value).unwrap();
                 Ok(None)
             }
             Statement::VarDeclaration { name, initializer } => {
@@ -494,7 +506,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             String::from_utf8(interpreter.writer).unwrap(),
-            format!("{:?}\n", LoxValue::LString("Hello".to_string()))
+            format!("{:}\n", LoxValue::LString("Hello".to_string()))
         )
     }
 
@@ -509,7 +521,7 @@ mod tests {
         interpreter.interpret_program(&program).unwrap();
         assert_eq!(
             String::from_utf8(interpreter.writer).unwrap(),
-            format!("{:?}\n", LoxValue::LString("Hello".to_string()))
+            format!("{:}\n", LoxValue::LString("Hello".to_string()))
         );
     }
 
@@ -524,7 +536,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             String::from_utf8(interpreter.writer).unwrap(),
-            format!("{:?}\n", LoxValue::LString("Hello".to_string()))
+            format!("{:}\n", LoxValue::LString("Hello".to_string()))
         );
     }
     #[test]
@@ -540,7 +552,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             String::from_utf8(interpreter.writer).unwrap(),
-            format!("{:?}\n", LoxValue::LString("Hello".to_string()))
+            format!("{:}\n", LoxValue::LString("Hello".to_string()))
         );
     }
 
@@ -555,6 +567,6 @@ mod tests {
             .expect("error! test failed.");
 
         let written = String::from_utf8(interpreter.writer).unwrap();
-        assert_eq!(written, format!("{:?}\n", LoxValue::LNumber(1.)));
+        assert_eq!(written, format!("{:}\n", LoxValue::LNumber(1.)));
     }
 }
