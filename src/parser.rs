@@ -13,44 +13,44 @@ pub enum ParserError {
     #[error("[line {line}] Error at '{lexeme}': Unexpected token {lexeme}.")]
     UnexpectedToken { line: usize, lexeme: String },
     // line is not implemented yet for missing tokens
-    #[error("[line {line}] Error at '{lexeme}': Expected ';' after value.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect ';' after value.")]
     MissingSemicolonPrint { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expected ';' after expression.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect ';' after expression.")]
     MissingSemicolonExpressionStatement { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expected ';' after loop condition.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect ';' after loop condition.")]
     MissingSemicolonLoopCondition { line: usize, lexeme: String },
     #[error("[line {line}] Error at '{lexeme}': invalid syntax for variable declaration.")]
     InvalidSyntaxVarDeclaration { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expected ';' after variable declaration.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect ';' after variable declaration.")]
     MissingSemicolonVariableDeclaration { line: usize, lexeme: String },
     #[error("[line {line}] Error at '{lexeme}': Invalid assignment target.")]
     InvalidAssignmentTarget { line: usize, lexeme: String },
     #[error("[line {line}] Error at '{lexeme}': Unclosed block, expected '}}'.")]
     UnclosedBlock { line: usize, lexeme: String },
     // these dedicated error types... dont feel very useful.
-    #[error("[line {line}] Error at '{lexeme}': Missing '(' after 'while'.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect '(' after 'while'.")]
     MissingOpeningParenthesisWhile { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Missing ')' after condition.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect ')' after condition.")]
     MissingClosingParenthesisCondition { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Missing '(' after 'if'.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect '(' after 'if'.")]
     MissingOpeningParenthesisIf { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Missing '(' after 'for'.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect '(' after 'for'.")]
     MissingOpeningParenthesisFor { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Missing ')' after 'for' clauses.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect ')' after 'for' clauses.")]
     MissingClosingParenthesisFor { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Missing ')' after call arguments.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect ')' after call arguments.")]
     MissingClosingParenthesisInCall { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expected function name.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect function name.")]
     FunctionIdentifierExpected { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expected '(' after function name.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect '(' after function name.")]
     MissingOpeningParenthesisFunction { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expected function parameter identifier.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect function parameter identifier.")]
     FunctionExpectedParameterName { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expected ')' after function parameters.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect ')' after function parameters.")]
     MissingClosingParenthesisFunction { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expected '{{' to begin function body.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect '{{' to begin function body.")]
     MissingOpeningBraceFunction { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expected '}}' to close function body.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect '}}' to close function body.")]
     MissingClosingBraceFunction { line: usize, lexeme: String },
 
     #[error("[line {line}] Error at '{lexeme}': Expect expression.")]
