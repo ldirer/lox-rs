@@ -81,7 +81,7 @@ struct LoxFunction {
     name: String,
     parameters: Vec<String>,
     body: Vec<Statement>,
-    environment: Rc<RefCell<LoxEnvironment>>,
+    environment: Rc<LoxEnvironment>,
 }
 
 impl Debug for LoxFunction {
@@ -115,14 +115,14 @@ impl<W: Write> Interpreter<W> {
 
 impl<W: Write> Interpreter<W> {
     pub fn interpret_program(&mut self, program: &Vec<Statement>) -> Result<(), InterpreterError> {
-        let environment = Rc::new(RefCell::new(LoxEnvironment::new(None)));
+        let environment = Rc::new(LoxEnvironment::new(None));
         self.interpret_program_with_env(program, environment)
     }
 
     pub fn interpret_program_with_env(
         &mut self,
         program: &Vec<Statement>,
-        environment: Rc<RefCell<LoxEnvironment>>,
+        environment: Rc<LoxEnvironment>,
     ) -> Result<(), InterpreterError> {
         for statement in program {
             self.interpret_statement(statement, environment.clone())?;
@@ -135,7 +135,7 @@ impl<W: Write> Interpreter<W> {
     fn interpret_statement(
         &mut self,
         statement: &Statement,
-        environment: Rc<RefCell<LoxEnvironment>>,
+        environment: Rc<LoxEnvironment>,
     ) -> Result<Option<LoxValue>, InterpreterError> {
         match statement {
             Statement::ExprStatement { expression } => {
@@ -149,13 +149,13 @@ impl<W: Write> Interpreter<W> {
             }
             Statement::VarDeclaration { name, initializer } => {
                 let value = self.interpret_expression(initializer, environment.clone())?;
-                environment.borrow_mut().define(name.clone(), value);
+                environment.define(name.clone(), value);
                 Ok(None)
             }
             Statement::Block { statements } => {
                 let mut child_env = LoxEnvironment::new(None);
                 child_env.parent = Some(environment.clone());
-                let child_env = Rc::new(RefCell::new(child_env));
+                let child_env = Rc::new(child_env);
                 for statement in statements {
                     let return_value = self.interpret_statement(statement, child_env.clone())?;
                     if !return_value.is_none() {
@@ -193,7 +193,7 @@ impl<W: Write> Interpreter<W> {
                 parameters,
                 body,
             } => {
-                environment.borrow_mut().define(
+                environment.define(
                     name.clone(),
                     LoxValue::LFunc(LoxFunction {
                         name: name.clone(),
@@ -214,7 +214,7 @@ impl<W: Write> Interpreter<W> {
     fn interpret_expression(
         &mut self,
         expr: &Expr,
-        environment: Rc<RefCell<LoxEnvironment>>,
+        environment: Rc<LoxEnvironment>,
     ) -> Result<LoxValue, InterpreterError> {
         match expr {
             Expr::Literal(literal) => Ok(self.interpret_literal(literal)),
@@ -237,12 +237,10 @@ impl<W: Write> Interpreter<W> {
             Expr::Grouping(grouped_expr) => {
                 self.interpret_expression(grouped_expr, environment.clone())
             }
-            Expr::Variable { name } => Ok(environment.borrow().lookup(name.clone())),
+            Expr::Variable { name } => Ok(environment.lookup(name.clone())),
             Expr::Assign { name, value } => {
                 let left_hand_side = self.interpret_expression(value, environment.clone())?;
-                environment
-                    .borrow_mut()
-                    .assign(name.clone(), left_hand_side.clone());
+                environment.assign(name.clone(), left_hand_side.clone());
                 // there's probably something wrong here about cloning if the value is mutable.
                 Ok(left_hand_side)
             }
@@ -366,18 +364,7 @@ impl<W: Write> Interpreter<W> {
                 .collect(),
         ));
         child_env.parent = Some(lox_func.environment.clone());
-        let child_env = Rc::new(RefCell::new(child_env));
-
-        // let mut child_env = lox_func.environment.clone();
-        // TODO understand why this WAS required (before init on env::new). Looks like the mutable reference stays alive into
-        // the interpret statement calls.
-        // erm... adding a block to make sure the mutable reference 'expires'.
-        // {
-        //     let mut mut_ref = child_env.borrow_mut();
-        //     for (name, value) in zip(&lox_func.parameters, arguments) {
-        //         mut_ref.define(name.clone(), value);
-        //     }
-        // }
+        let child_env = Rc::new(child_env);
 
         for statement in &lox_func.body {
             let return_value = self.interpret_statement(statement, child_env.clone())?;
@@ -447,7 +434,7 @@ mod tests {
         let expr = parse_expr(code).expect("error in test setup");
         let env = LoxEnvironment::new(None);
         interpreter
-            .interpret_expression(&expr, Rc::new(RefCell::new(env)))
+            .interpret_expression(&expr, Rc::new(env))
             .unwrap()
     }
 
@@ -456,7 +443,7 @@ mod tests {
         let mut interpreter = Interpreter::new(mock_writer);
         let expr = parse_expr(code).expect("error in test setup");
         let env = LoxEnvironment::new(None);
-        let lox_value = interpreter.interpret_expression(&expr, Rc::new(RefCell::new(env)));
+        let lox_value = interpreter.interpret_expression(&expr, Rc::new(env));
         assert!(lox_value.is_err());
         lox_value.err().unwrap()
     }
@@ -548,7 +535,7 @@ mod tests {
         let env = LoxEnvironment::new(None);
 
         interpreter
-            .interpret_statement(&statement, Rc::new(RefCell::new(env)))
+            .interpret_statement(&statement, Rc::new(env))
             .unwrap();
         assert_eq!(
             String::from_utf8(interpreter.writer).unwrap(),
@@ -578,7 +565,7 @@ mod tests {
         let statement = parse_statement("if (1) print \"Hello\";").expect("error in test setup");
         let env = LoxEnvironment::new(None);
         interpreter
-            .interpret_statement(&statement, Rc::new(RefCell::new(env)))
+            .interpret_statement(&statement, Rc::new(env))
             .unwrap();
         assert_eq!(
             String::from_utf8(interpreter.writer).unwrap(),
@@ -594,7 +581,7 @@ mod tests {
                 .expect("error in test setup");
         let env = LoxEnvironment::new(None);
         interpreter
-            .interpret_statement(&statement, Rc::new(RefCell::new(env)))
+            .interpret_statement(&statement, Rc::new(env))
             .unwrap();
         assert_eq!(
             String::from_utf8(interpreter.writer).unwrap(),
