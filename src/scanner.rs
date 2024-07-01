@@ -110,7 +110,7 @@ impl Scanner<'_> {
             }
             '"' => Some(self.consume_if_match_string()?),
             c if is_digit(&c) => Some(self.consume_if_match_number()),
-            c if is_alphanumeric(&c) => Some(self.consume_if_match_identifier()),
+            c if is_alpha(&c) => Some(self.consume_if_match_identifier()),
             _ => {
                 return Err(ScanningError::UnexpectedCharacter {
                     line: self.line,
@@ -294,16 +294,20 @@ fn is_digit(c: &char) -> bool {
         _ => false,
     }
 }
-fn is_alphanumeric(c: &char) -> bool {
+fn is_alpha(c: &char) -> bool {
     match c {
         'a'..='z' | 'A'..='Z' | '_' => true,
         _ => false,
     }
 }
+fn is_alphanumeric(c: &char) -> bool {
+    is_digit(c) || is_alpha(c)
+}
 
 #[cfg(test)]
 mod tests {
     use crate::scanner::{tokenize, Scanner};
+    use crate::test_helpers::parse_program;
     use crate::token::{Token, TokenType};
 
     #[test]
@@ -467,6 +471,27 @@ mod tests {
                 r#type: TokenType::EOF,
                 lexeme: "".to_string(),
                 line: 2,
+            }
+        );
+    }
+
+    #[test]
+    fn test_identifier_with_digit() {
+        let tokens = tokenize("a_0".to_string(), |err| panic!("{err:?}"));
+        assert_eq!(
+            tokens[0],
+            Token {
+                r#type: TokenType::Identifier,
+                lexeme: "a_0".to_string(),
+                line: 1,
+            }
+        );
+        assert_eq!(
+            tokens[1],
+            Token {
+                r#type: TokenType::EOF,
+                lexeme: "".to_string(),
+                line: 1,
             }
         );
     }
