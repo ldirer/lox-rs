@@ -8,50 +8,53 @@ use crate::token::{Token, TokenType};
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ParserError {
-    #[error("line: {line}. Expected ')' after expression.")]
+    #[error("[line {line}] Expected ')' after expression.")]
     UnmatchedParenthesis { line: usize },
-    #[error("line: {line}. Unexpected token {lexeme}.")]
+    #[error("[line {line}] Unexpected token {lexeme}.")]
     UnexpectedToken { line: usize, lexeme: String },
     // line is not implemented yet for missing tokens
-    #[error("line: {line}. Expected ';' after value.")]
+    #[error("[line {line}] Expected ';' after value.")]
     MissingSemicolonPrint { line: usize },
-    #[error("line: {line}. Expected ';' after expression.")]
+    #[error("[line {line}] Expected ';' after expression.")]
     MissingSemicolonExpressionStatement { line: usize },
-    #[error("line: {line}. Expected ';' after loop condition.")]
+    #[error("[line {line}] Expected ';' after loop condition.")]
     MissingSemicolonLoopCondition { line: i32 },
-    #[error("line: {line}. invalid syntax for variable declaration.")]
+    #[error("[line {line}] invalid syntax for variable declaration.")]
     InvalidSyntaxVarDeclaration { line: usize },
-    #[error("line: {line}. Expected ';' after variable declaration.")]
+    #[error("[line {line}] Expected ';' after variable declaration.")]
     MissingSemicolonVariableDeclaration { line: usize },
-    #[error("line: {line}. Invalid assignment target.")]
+    #[error("[line {line}] Invalid assignment target.")]
     InvalidAssignmentTarget { line: usize },
-    #[error("line: {line}. Unclosed block, expected '}}'.")]
+    #[error("[line {line}] Unclosed block, expected '}}'.")]
     UnclosedBlock { line: usize },
     // these dedicated error types... dont feel very useful.
-    #[error("line: {line}. Missing '(' after 'while'.")]
+    #[error("[line {line}] Missing '(' after 'while'.")]
     MissingOpeningParenthesisWhile { line: usize },
-    #[error("line: {line}. Missing ')' after condition.")]
+    #[error("[line {line}] Missing ')' after condition.")]
     MissingClosingParenthesisCondition { line: usize },
-    #[error("line: {line}. Missing '(' after 'if'.")]
+    #[error("[line {line}] Missing '(' after 'if'.")]
     MissingOpeningParenthesisIf { line: i32 },
-    #[error("line: {line}. Missing '(' after 'for'.")]
+    #[error("[line {line}] Missing '(' after 'for'.")]
     MissingOpeningParenthesisFor { line: i32 },
-    #[error("line: {line}. Missing ')' after 'for' clauses.")]
+    #[error("[line {line}] Missing ')' after 'for' clauses.")]
     MissingClosingParenthesisFor { line: i32 },
-    #[error("line: {line}. Missing ')' after call arguments.")]
+    #[error("[line {line}] Missing ')' after call arguments.")]
     MissingClosingParenthesisInCall { line: i32 },
-    #[error("line: {line}. Expected function name.")]
+    #[error("[line {line}] Expected function name.")]
     FunctionIdentifierExpected { line: i32 },
-    #[error("line: {line}. Expected '(' after function name.")]
+    #[error("[line {line}] Expected '(' after function name.")]
     MissingOpeningParenthesisFunction { line: i32 },
-    #[error("line: {line}. Expected function parameter identifier.")]
+    #[error("[line {line}] Expected function parameter identifier.")]
     FunctionExpectedParameterName { line: i32 },
-    #[error("line: {line}. Expected ')' after function parameters.")]
+    #[error("[line {line}] Expected ')' after function parameters.")]
     MissingClosingParenthesisFunction { line: i32 },
-    #[error("line: {line}. Expected '{{' to begin function body.")]
+    #[error("[line {line}] Expected '{{' to begin function body.")]
     MissingOpeningBraceFunction { line: i32 },
-    #[error("line: {line}. Expected '}}' to close function body.")]
+    #[error("[line {line}] Expected '}}' to close function body.")]
     MissingClosingBraceFunction { line: i32 },
+
+    #[error("[line {line}] Error at '{lexeme}': Expect expression.")]
+    ExpectExpression { line: usize, lexeme: String },
 }
 pub struct Parser<T: Iterator<Item = Token>> {
     tokens: Peekable<T>,
@@ -516,10 +519,10 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                     Some(_) => Ok(Expr::Grouping(Box::new(expr))),
                 }
             }
-            _ => Err(ParserError::UnexpectedToken {
+            _ => Err(ParserError::ExpectExpression {
                 line: token.line,
                 lexeme: if token.r#type == TokenType::EOF {
-                    "End Of File".to_string()
+                    "end".to_string()
                 } else {
                     token.lexeme
                 },
@@ -731,9 +734,9 @@ mod tests {
         let err = expr.err().unwrap();
         assert_eq!(
             err,
-            ParserError::UnexpectedToken {
+            ParserError::ExpectExpression {
                 line: 1,
-                lexeme: "End Of File".to_string()
+                lexeme: "end".to_string()
             }
         );
     }

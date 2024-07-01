@@ -91,7 +91,8 @@ fn run(source: String) {
             Err(err) => println!("Interpreter error: {err}"),
         },
         Err(err) => {
-            println!("Parser error: {err}")
+            eprintln!("{err}");
+            exit(65)
         }
     }
 }
@@ -113,7 +114,8 @@ fn scanner_error(err: ScanningError) {
 }
 
 fn report(line: usize, location: &str, message: &str) {
-    println!("[line {line}] Error {location}: {message}")
+    eprintln!("[line {line}] Error {location}: {message}");
+    exit(65)
     //     TODO had_error = true
 }
 
