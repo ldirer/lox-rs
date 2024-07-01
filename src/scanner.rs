@@ -1,5 +1,6 @@
 use std::iter::Peekable;
 use std::str::{from_utf8, Chars};
+
 use thiserror::Error;
 
 use crate::token::{Token, TokenType};
@@ -307,7 +308,6 @@ fn is_alphanumeric(c: &char) -> bool {
 #[cfg(test)]
 mod tests {
     use crate::scanner::{tokenize, Scanner};
-    use crate::test_helpers::parse_program;
     use crate::token::{Token, TokenType};
 
     #[test]

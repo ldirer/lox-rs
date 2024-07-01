@@ -280,7 +280,6 @@ pub fn format_reverse_polish_notation(expr: &Expr) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::Expr::Unary;
     use crate::ast::Literal::Number;
     use crate::ast::{
         format_lisp_like, format_reverse_polish_notation, BinaryOperator, BinaryOperatorType, Expr,

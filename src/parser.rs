@@ -2,7 +2,6 @@ use std::iter::Peekable;
 
 use thiserror::Error;
 
-use crate::ast::Expr::Binary;
 use crate::ast::Statement::ReturnStatement;
 use crate::ast::{
     BinaryLogicalOperator, BinaryLogicalOperatorType, BinaryOperator, BinaryOperatorType, Expr,
@@ -129,7 +128,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                         return Err(ParserError::FunctionExpectedParameterName { line, lexeme });
                     }
                     Some(t) => {
-                        if (parameters.len() >= 255) {
+                        if parameters.len() >= 255 {
                             // we should not stop parsing here. We want to report the error but the parsing is in a clean state.
                             // looks like this is a bit tricky, leaving it aside for now.
                             return Err(ParserError::FunctionTooManyArguments {
@@ -756,7 +755,6 @@ fn token_to_binary(token: Token) -> BinaryOperator {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::Expr::Binary;
     use crate::ast::Literal::Number;
     use crate::ast::Statement::{ExprStatement, ReturnStatement};
     use crate::ast::{

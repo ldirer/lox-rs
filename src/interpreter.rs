@@ -1,5 +1,4 @@
-use std::cell::RefCell;
-use std::fmt::{Debug, Display, Formatter, Pointer};
+use std::fmt::{Debug, Display, Formatter};
 use std::io::Write;
 use std::iter::zip;
 use std::rc::Rc;
@@ -18,20 +17,6 @@ use crate::interpreter::LoxValue::*;
 type LoxEnvironment = Environment<LoxValue>;
 #[derive(Debug, PartialEq, Error)]
 pub enum InterpreterError {
-    // TODO having dedicated types for the AST was nice, but line numbers in errors are even nicer.
-    // need to get them somehow.
-    #[error("operation {operator} not supported between {left:?} and {right:?}")]
-    BinaryOperationNotSupported {
-        operator: BinaryOperatorType,
-        left: LoxValue,
-        right: LoxValue,
-    },
-    #[error("operation {operator} not supported on {operand:?}")]
-    UnaryOperationNotSupported {
-        operator: UnaryOperatorType,
-        operand: LoxValue,
-    },
-
     #[error("[line {line}] runtime error: Operands must be two numbers or two strings.")]
     BinaryAdditionNotSupported { line: usize },
     #[error("[line {line}] runtime error: Operands must be numbers.")]
@@ -119,7 +104,7 @@ impl<W: Write> Interpreter<W> {
         self.interpret_program_with_env(program, environment)
     }
 
-    pub fn interpret_program_with_env(
+    fn interpret_program_with_env(
         &mut self,
         program: &Vec<Statement>,
         environment: Rc<LoxEnvironment>,
@@ -322,11 +307,6 @@ impl<W: Write> Interpreter<W> {
             (_, Gt | Gte | Lt | Lte, _) => {
                 Err(InterpreterError::BinaryComparisonNotSupported { line: op.line })
             }
-            (a, _, b) => Err(InterpreterError::BinaryOperationNotSupported {
-                operator: op.type_,
-                left: a,
-                right: b,
-            }),
         }
     }
 
@@ -420,10 +400,8 @@ fn is_truthy(v: &LoxValue) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
     use std::rc::Rc;
 
-    use crate::ast::BinaryOperatorType::{Multiply, Plus};
     use crate::interpreter::{Interpreter, InterpreterError, LoxEnvironment, LoxValue};
     use crate::test_helpers::{parse_expr, parse_program, parse_statement};
 
@@ -549,7 +527,6 @@ mod tests {
         let mut interpreter = Interpreter::new(mock_writer);
         let program = parse_program("fun f() { return \"Hello\";} \nprint f();")
             .expect("error in test setup");
-        let env = LoxEnvironment::new(None);
 
         interpreter.interpret_program(&program).unwrap();
         assert_eq!(

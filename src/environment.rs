@@ -56,10 +56,10 @@ impl<T: Clone> Environment<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::environment::Environment;
-    use std::cell::RefCell;
     use std::collections::HashMap;
     use std::rc::Rc;
+
+    use crate::environment::Environment;
 
     #[test]
     fn test_lookup() {
@@ -84,7 +84,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_redefine() {
-        let mut environment = Environment::<i32>::new(None);
+        let environment = Environment::<i32>::new(None);
         environment.define("a".to_string(), 1);
         assert_eq!(environment.lookup("a".to_string()), 1);
         // redefine
