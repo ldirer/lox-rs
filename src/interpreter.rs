@@ -45,8 +45,14 @@ pub enum InterpreterError {
     #[error("[line {line}] runtime error: Operand must be a number.")]
     UnaryNegateNotSupported { line: usize },
 
-    #[error("runtime error: Can only call functions and classes.")]
-    CannotCall {},
+    #[error("[line {line}] runtime error: Can only call functions and classes.")]
+    CannotCall { line: usize },
+    #[error("[line {line}] runtime error: Expected {parameters} arguments but got {arguments}.")]
+    WrongNumberOfArguments {
+        parameters: usize,
+        arguments: usize,
+        line: usize,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -272,7 +278,11 @@ impl<W: Write> Interpreter<W> {
                 let lox_right_value = self.interpret_expression(right, environment.clone())?;
                 return Ok(lox_right_value);
             }
-            Expr::FunctionCall { callee, arguments } => {
+            Expr::FunctionCall {
+                callee,
+                arguments,
+                line,
+            } => {
                 let lox_func = self.interpret_expression(callee, environment.clone())?;
                 let args: Result<Vec<LoxValue>, InterpreterError> = arguments
                     .into_iter()
@@ -281,7 +291,7 @@ impl<W: Write> Interpreter<W> {
                 if let Err(err) = args {
                     return Err(err);
                 }
-                self.interpret_call(&lox_func, args.unwrap())
+                self.interpret_call(&lox_func, args.unwrap(), *line)
             }
         }
     }
@@ -326,10 +336,11 @@ impl<W: Write> Interpreter<W> {
         &mut self,
         value: &LoxValue,
         arguments: Vec<LoxValue>,
+        line: usize,
     ) -> Result<LoxValue, InterpreterError> {
         match value {
-            LFunc(lox_function) => self.interpret_function_call(lox_function, arguments),
-            _ => return Err(InterpreterError::CannotCall {}),
+            LFunc(lox_function) => self.interpret_function_call(lox_function, arguments, line),
+            _ => return Err(InterpreterError::CannotCall { line }),
         }
     }
 
@@ -337,9 +348,14 @@ impl<W: Write> Interpreter<W> {
         &mut self,
         lox_func: &LoxFunction,
         arguments: Vec<LoxValue>,
+        line: usize,
     ) -> Result<LoxValue, InterpreterError> {
         if lox_func.parameters.len() != arguments.len() {
-            panic!("lox interpreter: number of arguments did not match number of parameters for function {:?}", lox_func.name);
+            InterpreterError::WrongNumberOfArguments {
+                line,
+                parameters: lox_func.parameters.len(),
+                arguments: arguments.len(),
+            };
         }
 
         // copy-pasta, this could be factored out. I wonder if I should be reusing the block interpretation too

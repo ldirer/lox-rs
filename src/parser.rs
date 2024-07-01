@@ -59,6 +59,8 @@ pub enum ParserError {
 
     #[error("[line {line}] Error at '{lexeme}': Expect expression.")]
     ExpectExpression { line: usize, lexeme: String },
+    #[error("[line {line}] Error at '{lexeme}': Expect expression.")]
+    FunctionTooManyArguments { line: usize, lexeme: String },
 }
 
 pub struct Parser<T: Iterator<Item = Token>> {
@@ -127,6 +129,14 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                         return Err(ParserError::FunctionExpectedParameterName { line, lexeme });
                     }
                     Some(t) => {
+                        if (parameters.len() >= 255) {
+                            // we should not stop parsing here. We want to report the error but the parsing is in a clean state.
+                            // looks like this is a bit tricky, leaving it aside for now.
+                            return Err(ParserError::FunctionTooManyArguments {
+                                line: t.line,
+                                lexeme: t.lexeme.clone(),
+                            });
+                        }
                         parameters.push(t.lexeme);
                     }
                 }
@@ -533,6 +543,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 ParserError::MissingClosingParenthesisInCall { line, lexeme },
             )?;
             expr = Expr::FunctionCall {
+                line,
                 callee: Box::new(expr),
                 arguments: args,
             };
@@ -957,6 +968,7 @@ mod tests {
                 callee: Box::from(Expr::Variable {
                     name: "caller".to_string()
                 }),
+                line: 1,
                 arguments: vec![
                     Expr::Literal(Literal::Number(1.)),
                     Expr::Literal(Literal::Number(2.))

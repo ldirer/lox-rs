@@ -61,6 +61,7 @@ pub enum Expr {
         name: String,
     },
     FunctionCall {
+        line: usize,
         callee: Box<Expr>,
         arguments: Vec<Expr>,
     },
