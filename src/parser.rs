@@ -51,7 +51,7 @@ pub enum ParserError {
     FunctionExpectedParameterName { line: usize, lexeme: String },
     #[error("[line {line}] Error at '{lexeme}': Expect ')' after function parameters.")]
     MissingClosingParenthesisFunction { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect '{{' to begin function body.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect '{{' before function body.")]
     MissingOpeningBraceFunction { line: usize, lexeme: String },
     #[error("[line {line}] Error at '{lexeme}': Expect '}}' to close function body.")]
     MissingClosingBraceFunction { line: usize, lexeme: String },
@@ -100,7 +100,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     fn parse_function_declaration(&mut self) -> Result<Statement, ParserError> {
-        let ErrorProps { line, lexeme } = self.get_error_props();
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
         let name = self
             .consume(
                 TokenType::Identifier,
@@ -108,7 +108,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             )?
             .lexeme;
 
-        let ErrorProps { line, lexeme } = self.get_error_props();
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
             TokenType::LeftParen,
             ParserError::MissingOpeningParenthesisFunction { line, lexeme },
@@ -124,7 +124,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 let token = self.match_current(&vec![TokenType::Identifier]);
                 match token {
                     None => {
-                        let ErrorProps { line, lexeme } = self.get_error_props();
+                        let TokenInfo { line, lexeme } = self.get_current_token_info();
                         return Err(ParserError::FunctionExpectedParameterName { line, lexeme });
                     }
                     Some(t) => {
@@ -145,18 +145,18 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             }
         }
 
-        let ErrorProps { line, lexeme } = self.get_error_props();
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
             TokenType::RightParen,
             ParserError::MissingClosingParenthesisFunction { line, lexeme },
         )?;
-        let ErrorProps { line, lexeme } = self.get_error_props();
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
             TokenType::LeftBrace,
             ParserError::MissingOpeningBraceFunction { line, lexeme },
         )?;
         let body = self.parse_block()?;
-        let ErrorProps { line, lexeme } = self.get_error_props();
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
             TokenType::RightBrace,
             ParserError::MissingClosingBraceFunction { line, lexeme },
@@ -172,26 +172,30 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     fn parse_var_declaration(&mut self) -> Result<Statement, ParserError> {
         match self.match_current(&vec![TokenType::Identifier]) {
             None => {
-                let ErrorProps { line, lexeme } = self.get_error_props();
+                let TokenInfo { line, lexeme } = self.get_current_token_info();
                 return Err(ParserError::InvalidSyntaxVarDeclaration { line, lexeme });
             }
             Some(Token {
                 r#type: TokenType::Identifier,
                 lexeme: name,
-                ..
+                line,
             }) => {
                 let mut initializer = Expr::Literal(Literal::Nil);
                 if self.match_current(&vec![TokenType::Equal]).is_some() {
                     initializer = self.parse_expression()?;
                 }
 
-                let ErrorProps { line, lexeme } = self.get_error_props();
+                let TokenInfo { line, lexeme } = self.get_current_token_info();
                 self.consume(
                     TokenType::Semicolon,
                     ParserError::MissingSemicolonVariableDeclaration { line, lexeme },
                 )?;
 
-                Ok(Statement::VarDeclaration { initializer, name })
+                Ok(Statement::VarDeclaration {
+                    initializer,
+                    name,
+                    line,
+                })
             }
             Some(t) => unreachable!("unexpected token type for {:?}", t),
         }
@@ -220,7 +224,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 statements: self.parse_block()?,
             };
 
-            let ErrorProps { line, lexeme } = self.get_error_props();
+            let TokenInfo { line, lexeme } = self.get_current_token_info();
             self.consume(
                 TokenType::RightBrace,
                 ParserError::UnclosedBlock { line, lexeme },
@@ -236,7 +240,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     /// for (; ; i = i + 1) print i;
     /// for (; ; ) print i;
     fn parse_for_statement(&mut self) -> Result<Statement, ParserError> {
-        let ErrorProps { line, lexeme } = self.get_error_props();
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
             TokenType::LeftParen,
             ParserError::MissingOpeningParenthesisFor { line, lexeme },
@@ -252,7 +256,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         let mut condition = None;
         if self.match_current(&vec![TokenType::Semicolon]).is_none() {
             condition = Some(self.parse_expression()?);
-            let ErrorProps { line, lexeme } = self.get_error_props();
+            let TokenInfo { line, lexeme } = self.get_current_token_info();
             self.consume(
                 TokenType::Semicolon,
                 ParserError::MissingSemicolonLoopCondition { line, lexeme },
@@ -262,7 +266,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         let mut increment = None;
         if self.match_current(&vec![TokenType::RightParen]).is_none() {
             increment = Some(self.parse_expression()?);
-            let ErrorProps { line, lexeme } = self.get_error_props();
+            let TokenInfo { line, lexeme } = self.get_current_token_info();
             self.consume(
                 TokenType::RightParen,
                 ParserError::MissingClosingParenthesisFor { line, lexeme },
@@ -293,14 +297,14 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     fn parse_if_statement(&mut self) -> Result<Statement, ParserError> {
-        let ErrorProps { line, lexeme } = self.get_error_props();
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
             TokenType::LeftParen,
             ParserError::MissingOpeningParenthesisIf { line, lexeme },
         )?;
         let condition = self.parse_expression()?;
 
-        let ErrorProps { line, lexeme } = self.get_error_props();
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
             TokenType::RightParen,
             ParserError::MissingClosingParenthesisCondition { line, lexeme },
@@ -318,13 +322,13 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         })
     }
     fn parse_while_statement(&mut self) -> Result<Statement, ParserError> {
-        let ErrorProps { line, lexeme } = self.get_error_props();
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
             TokenType::LeftParen,
             ParserError::MissingOpeningParenthesisWhile { line, lexeme },
         )?;
         let condition = self.parse_expression()?;
-        let ErrorProps { line, lexeme } = self.get_error_props();
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
             TokenType::RightParen,
             ParserError::MissingClosingParenthesisCondition { line, lexeme },
@@ -353,9 +357,8 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         let expr = self.parse_expression()?;
         let token_match = self.match_current(&vec![TokenType::Semicolon]);
         match token_match {
-            // todo grab the line somehow? on the previous token. '.previous' that I removed would be useful here.
             None => {
-                let ErrorProps { line, lexeme } = self.get_error_props();
+                let TokenInfo { line, lexeme } = self.get_current_token_info();
                 Err(ParserError::MissingSemicolonPrint { line, lexeme })
             }
             Some(_) => Ok(Statement::PrintStatement { expression: expr }),
@@ -372,7 +375,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             expr = self.parse_expression()?;
         }
 
-        let ErrorProps { line, lexeme } = self.get_error_props();
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
             TokenType::Semicolon,
             ParserError::MissingSemicolonExpressionStatement { line, lexeme },
@@ -385,7 +388,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         let token_match = self.match_current(&vec![TokenType::Semicolon]);
         match token_match {
             None => {
-                let ErrorProps { line, lexeme } = self.get_error_props();
+                let TokenInfo { line, lexeme } = self.get_current_token_info();
                 Err(ParserError::MissingSemicolonExpressionStatement { line, lexeme })
             }
             Some(_) => Ok(Statement::ExprStatement { expression: expr }),
@@ -402,7 +405,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         let expr = self.parse_logical_or()?;
         match (self.match_current(&vec![TokenType::Equal]), &expr) {
             (None, _) => Ok(expr),
-            (Some(_), Expr::Variable { name }) => {
+            (Some(_), Expr::Variable { name, .. }) => {
                 let value = self.parse_assignment()?;
                 Ok(Expr::Assign {
                     name: name.clone(),
@@ -536,7 +539,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                     args.push(self.parse_expression()?);
                 }
             }
-            let ErrorProps { line, lexeme } = self.get_error_props();
+            let TokenInfo { line, lexeme } = self.get_current_token_info();
             self.consume(
                 TokenType::RightParen,
                 ParserError::MissingClosingParenthesisInCall { line, lexeme },
@@ -558,7 +561,11 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         }
         let token = token.unwrap();
         match token.r#type {
-            TokenType::Identifier => Ok(Expr::Variable { name: token.lexeme }),
+            TokenType::Identifier => Ok(Expr::Variable {
+                name: token.lexeme,
+                line: token.line,
+                depth: None,
+            }),
             TokenType::False => Ok(Expr::Literal(Literal::False)),
             TokenType::True => Ok(Expr::Literal(Literal::True)),
             TokenType::Nil => Ok(Expr::Literal(Literal::Nil)),
@@ -573,7 +580,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 let expr = self.parse_expression()?;
                 match self.match_current(&vec![TokenType::RightParen]) {
                     None => {
-                        let ErrorProps { line, lexeme } = self.get_error_props();
+                        let TokenInfo { line, lexeme } = self.get_current_token_info();
                         Err(ParserError::UnmatchedParenthesis { line, lexeme })
                     }
                     Some(_) => Ok(Expr::Grouping(Box::new(expr))),
@@ -675,24 +682,24 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         }
     }
 
-    fn get_error_props(&mut self) -> ErrorProps {
+    /// admittedly the way this is used is a bit lame. It works...
+    fn get_current_token_info(&mut self) -> TokenInfo {
         let token = self.tokens.peek().unwrap();
         let line = token.line;
         let mut lexeme = token.lexeme.clone();
         if token.r#type == TokenType::EOF {
             lexeme = "end".to_string();
         }
-        return ErrorProps { line, lexeme };
+        return TokenInfo { line, lexeme };
     }
 }
-struct ErrorProps {
+struct TokenInfo {
     line: usize,
     lexeme: String,
 }
 
-// TODO these conversion functions are okay... But not great.
-// 1. we panic.
-// 2. Nothing tells us if we forgot one operator. Ideally I'd like to know that all UnaryOperators/BinaryOperators can be produced by these functions.
+/// One thing I wish was better here:
+/// Nothing tells us if we forgot one operator. Ideally I'd like to know that all UnaryOperators/BinaryOperators can be produced by these functions.
 fn token_to_unary(token: Token) -> UnaryOperator {
     match token.r#type {
         TokenType::Minus => UnaryOperator {
@@ -928,7 +935,9 @@ mod tests {
                             line: 1
                         },
                         left: Box::from(Expr::Variable {
-                            name: "n".to_string()
+                            line: 1,
+                            name: "n".to_string(),
+                            depth: None,
                         }),
                         right: Box::from(Expr::Literal(Number(1.0)))
                     }
@@ -964,6 +973,8 @@ mod tests {
             parsed,
             Expr::FunctionCall {
                 callee: Box::from(Expr::Variable {
+                    depth: None,
+                    line: 1,
                     name: "caller".to_string()
                 }),
                 line: 1,

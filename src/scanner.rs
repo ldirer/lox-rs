@@ -184,16 +184,6 @@ impl Scanner<'_> {
             .nth(1)
     }
 
-    // TODO question: I'd prefer that to return `Result<TokenType::String, ScanningError::UnterminatedString>`.
-    // But these are not types, the compiler complains:
-    // error[E0573]: expected type, found variant `ScanningError::UnterminatedString`
-    // --> src/scanner.rs:168:36
-    // |
-    // 168 |     ) -> Result<TokenType::String, ScanningError::UnterminatedString> {
-    // |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    // |                                    |
-    // |                                    not a type
-    // |                                    help: try using the variant's enum: `crate::ScanningError`
     fn consume_if_match_string(&mut self) -> Result<TokenType, ScanningError> {
         while self.peek_one() != None && self.peek_one() != Some(&'"') {
             if self.peek_one() == Some(&'\n') {
@@ -266,7 +256,7 @@ impl Scanner<'_> {
 }
 
 fn match_keyword(input: &str) -> Option<TokenType> {
-    // TODO not great that nothing tells us we need to update this when we add a keyword
+    // Here nothing tells us we need to update this when we add a keyword.
     // it's not really a frequent operation but still would be nice.
     match input {
         "and" => Some(TokenType::And),

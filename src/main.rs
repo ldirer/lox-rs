@@ -9,12 +9,14 @@ use thiserror::Error;
 
 use crate::interpreter::Interpreter;
 use crate::parser::parse;
+use crate::resolver::VariableResolver;
 use crate::scanner::{tokenize, ScanningError};
 
 mod ast;
 mod environment;
 mod interpreter;
 mod parser;
+mod resolver;
 mod scanner;
 mod test_helpers;
 mod token;
@@ -81,33 +83,41 @@ fn run(source: String) {
     // passing a 'handle error' callback to stick to the book.
     let tokens = tokenize(source, scanner_error);
     // println!("{:#?}", tokens);
-    let parsed = parse(tokens.into_iter());
+    let mut parsed = parse(tokens.into_iter());
     // println!("{:#?}", parsed);
     let stdout_binding = std::io::stdout();
     let mut interpreter = Interpreter::new(stdout_binding);
+
+    let mut resolver_ = VariableResolver::new();
     match parsed {
-        Ok(statements) => match interpreter.interpret_program(&statements) {
-            Ok(_) => {}
-            Err(err) => {
-                // making the format of what we print consistent with what the Java version does
-                // so the tests from the official repo can be run without modification.
-                // first line is a runtime error, then it's a stacktrace (only the first line of the stacktrace is checked).
-                eprintln!(
-                    "{}",
-                    err.to_string()
-                        .strip_prefix("[line ")
-                        .unwrap()
-                        .trim_start_matches(|c: char| c.is_digit(10))
-                        .strip_prefix("] runtime error: ")
-                        .unwrap()
-                );
-                eprintln!("{err}");
-                exit(70)
-            }
-        },
         Err(err) => {
             eprintln!("{err}");
             exit(65)
+        }
+        Ok(mut statements) => {
+            if let Err(err) = resolver_.resolve_program(&mut statements) {
+                eprintln!("{err}");
+                exit(65)
+            }
+            match interpreter.interpret_program(&statements) {
+                Ok(_) => {}
+                Err(err) => {
+                    // making the format of what we print consistent with what the Java version does
+                    // so the tests from the official repo can be run without modification.
+                    // first line is a runtime error, then it's a stacktrace (only the first line of the stacktrace is checked).
+                    eprintln!(
+                        "{}",
+                        err.to_string()
+                            .strip_prefix("[line ")
+                            .unwrap()
+                            .trim_start_matches(|c: char| c.is_digit(10))
+                            .strip_prefix("] runtime error: ")
+                            .unwrap()
+                    );
+                    eprintln!("{err}");
+                    exit(70)
+                }
+            }
         }
     }
 }

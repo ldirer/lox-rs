@@ -38,18 +38,25 @@ impl<T: Clone> Environment<T> {
         }
     }
 
-    pub fn lookup(&self, name: String) -> T {
+    pub fn lookup(&self, name: String, depth: usize) -> T {
         // todo error handling
-        if let Some(value) = self.bindings.borrow().get(&name) {
-            return value.clone();
-        }
-        match &self.parent {
-            None => panic!(
+        if depth == 0 {
+            if let Some(value) = self.bindings.borrow().get(&name) {
+                return value.clone();
+            }
+            panic!(
                 "oh no lookup failed :o! Variable {} not found in scope. \nHere's all we got: {:#?}",
                 name,
                 self.bindings.borrow().keys()
-            ),
-            Some(parent_env) => parent_env.lookup(name),
+            );
+        }
+
+        match &self.parent {
+            None => {
+                eprintln!("Here's what we got: {:#?}", self.bindings.borrow().keys());
+                unreachable!("lookup failed for {name}! Implementation bug, we should have a parent or depth should be zero (not {depth})")
+            }
+            Some(parent_env) => parent_env.lookup(name, depth - 1),
         }
     }
 }
@@ -67,7 +74,7 @@ mod tests {
             ("a".to_string(), 1),
             ("b".to_string(), 2),
         ])));
-        let value = environment.lookup("a".to_string());
+        let value = environment.lookup("a".to_string(), 0);
         assert_eq!(value, 1)
     }
 
@@ -75,10 +82,10 @@ mod tests {
     fn test_define_and_assign() {
         let environment = Environment::<i32>::new(None);
         environment.define("a".to_string(), 1);
-        assert_eq!(environment.lookup("a".to_string()), 1);
+        assert_eq!(environment.lookup("a".to_string(), 0), 1);
         // change value
         environment.assign("a".to_string(), 3);
-        assert_eq!(environment.lookup("a".to_string()), 3);
+        assert_eq!(environment.lookup("a".to_string(), 0), 3);
     }
 
     #[test]
@@ -86,10 +93,10 @@ mod tests {
     fn test_redefine() {
         let environment = Environment::<i32>::new(None);
         environment.define("a".to_string(), 1);
-        assert_eq!(environment.lookup("a".to_string()), 1);
+        assert_eq!(environment.lookup("a".to_string(), 0), 1);
         // redefine
         environment.define("a".to_string(), 2);
-        assert_eq!(environment.lookup("a".to_string()), 2);
+        assert_eq!(environment.lookup("a".to_string(), 0), 2);
     }
 
     #[test]
@@ -98,10 +105,10 @@ mod tests {
 
         let mut env = Environment::<i32>::new(None);
         env.parent = Some(Rc::new(root_env));
-        assert_eq!(env.lookup("a".to_string()), 1);
+        assert_eq!(env.lookup("a".to_string(), 1), 1);
 
         env.assign("a".to_string(), 2);
-        assert_eq!(env.lookup("a".to_string()), 2);
+        assert_eq!(env.lookup("a".to_string(), 1), 2);
     }
 
     #[test]
@@ -113,12 +120,12 @@ mod tests {
         child_1.parent = Some(shared_parent_env.clone());
         child_2.parent = Some(shared_parent_env.clone());
 
-        assert_eq!(child_1.lookup("a".to_string()), 1);
-        assert_eq!(child_2.lookup("a".to_string()), 1);
+        assert_eq!(child_1.lookup("a".to_string(), 1), 1);
+        assert_eq!(child_2.lookup("a".to_string(), 1), 1);
 
         child_1.assign("a".to_string(), 2);
-        assert_eq!(shared_parent_env.lookup("a".to_string()), 2);
+        assert_eq!(shared_parent_env.lookup("a".to_string(), 0), 2);
         child_2.assign("a".to_string(), 3);
-        assert_eq!(shared_parent_env.lookup("a".to_string()), 3);
+        assert_eq!(shared_parent_env.lookup("a".to_string(), 0), 3);
     }
 }

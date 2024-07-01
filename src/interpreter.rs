@@ -132,7 +132,9 @@ impl<W: Write> Interpreter<W> {
                 writeln!(self.writer, "{}", value).unwrap();
                 Ok(None)
             }
-            Statement::VarDeclaration { name, initializer } => {
+            Statement::VarDeclaration {
+                name, initializer, ..
+            } => {
                 let value = self.interpret_expression(initializer, environment.clone())?;
                 environment.define(name.clone(), value);
                 Ok(None)
@@ -222,7 +224,11 @@ impl<W: Write> Interpreter<W> {
             Expr::Grouping(grouped_expr) => {
                 self.interpret_expression(grouped_expr, environment.clone())
             }
-            Expr::Variable { name } => Ok(environment.lookup(name.clone())),
+            Expr::Variable {
+                name,
+                depth,
+                line: _line,
+            } => Ok(environment.lookup(name.clone(), depth.unwrap())),
             Expr::Assign { name, value } => {
                 let left_hand_side = self.interpret_expression(value, environment.clone())?;
                 environment.assign(name.clone(), left_hand_side.clone());
@@ -403,7 +409,9 @@ mod tests {
     use std::rc::Rc;
 
     use crate::interpreter::{Interpreter, InterpreterError, LoxEnvironment, LoxValue};
-    use crate::test_helpers::{parse_expr, parse_program, parse_statement};
+    use crate::test_helpers::{
+        parse_and_resolve_program, parse_expr, parse_program, parse_statement,
+    };
 
     ///assumes success
     fn get_lox_value(code: &str) -> LoxValue {
@@ -525,7 +533,7 @@ mod tests {
     fn test_interpret_return_statement() {
         let mock_writer: Vec<u8> = Vec::new();
         let mut interpreter = Interpreter::new(mock_writer);
-        let program = parse_program("fun f() { return \"Hello\";} \nprint f();")
+        let program = parse_and_resolve_program("fun f() { return \"Hello\";} \nprint f();")
             .expect("error in test setup");
 
         interpreter.interpret_program(&program).unwrap();
@@ -570,7 +578,8 @@ mod tests {
     fn test_interpret_variables() {
         let mock_writer = vec![];
         let mut interpreter = Interpreter::new(mock_writer);
-        let program = parse_program("var a = 1;\nprint a;").expect("error in test setup");
+        let program =
+            parse_and_resolve_program("var a = 1;\nprint a;").expect("error in test setup");
 
         interpreter
             .interpret_program(&program)

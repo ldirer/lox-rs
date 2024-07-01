@@ -14,6 +14,7 @@ pub enum Statement {
     VarDeclaration {
         name: String,
         initializer: Expr,
+        line: usize,
     },
     FunctionDeclaration {
         name: String,
@@ -58,6 +59,9 @@ pub enum Expr {
     },
     Grouping(Box<Expr>),
     Variable {
+        // depth is ignored by the parser and populated later by the resolver
+        depth: Option<usize>,
+        line: usize,
         name: String,
     },
     FunctionCall {
@@ -203,7 +207,7 @@ pub fn format_lisp_like(expr: &Expr) -> String {
         Expr::Grouping(expr) => {
             format!("(group {})", format_lisp_like(expr))
         }
-        Expr::Variable { name } => {
+        Expr::Variable { name, .. } => {
             format!("{name}")
         }
         Expr::Assign { .. } => {
@@ -266,7 +270,7 @@ pub fn format_reverse_polish_notation(expr: &Expr) -> String {
         Expr::Grouping(expr) => {
             format!("{}", format_reverse_polish_notation(expr))
         }
-        Expr::Variable { name } => {
+        Expr::Variable { name, .. } => {
             format!("{}", name)
         }
         Expr::Assign { .. } => {
