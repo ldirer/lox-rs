@@ -239,24 +239,22 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         let mut condition = None;
         if self.match_current(&vec![TokenType::Semicolon]).is_none() {
             condition = Some(self.parse_expression()?);
+            let ErrorProps { line, lexeme } = self.get_error_props();
+            self.consume(
+                TokenType::Semicolon,
+                ParserError::MissingSemicolonLoopCondition { line, lexeme },
+            )?;
         }
-
-        let ErrorProps { line, lexeme } = self.get_error_props();
-        self.consume(
-            TokenType::Semicolon,
-            ParserError::MissingSemicolonLoopCondition { line, lexeme },
-        )?;
 
         let mut increment = None;
         if self.match_current(&vec![TokenType::RightParen]).is_none() {
             increment = Some(self.parse_expression()?);
+            let ErrorProps { line, lexeme } = self.get_error_props();
+            self.consume(
+                TokenType::RightParen,
+                ParserError::MissingClosingParenthesisFor { line, lexeme },
+            )?;
         }
-
-        let ErrorProps { line, lexeme } = self.get_error_props();
-        self.consume(
-            TokenType::RightParen,
-            ParserError::MissingClosingParenthesisFor { line, lexeme },
-        )?;
 
         let for_body: Statement = self.parse_statement()?;
 
@@ -906,6 +904,18 @@ mod tests {
                 ],
             }
         );
+    }
+
+    #[test]
+    fn test_for_loop() {
+        let parsed = parse_statement("for (;;) { print 1;}").unwrap();
+        match parsed {
+            Statement::Block { statements } => match statements[..] {
+                [Statement::WhileStatement { .. }] => return,
+                _ => panic!("unexpected statements in block (for loop)"),
+            },
+            _ => panic!("unexpected output for loop"),
+        }
     }
 
     #[test]
