@@ -88,7 +88,22 @@ fn run(source: String) {
     match parsed {
         Ok(statements) => match interpreter.interpret_program(&statements) {
             Ok(_) => {}
-            Err(err) => println!("Interpreter error: {err}"),
+            Err(err) => {
+                // making the format of what we print consistent with what the Java version does
+                // so the tests from the official repo can be run without modification.
+                // first line is a runtime error, then it's a stacktrace (only the first line of the stacktrace is checked).
+                eprintln!(
+                    "{}",
+                    err.to_string()
+                        .strip_prefix("[line ")
+                        .unwrap()
+                        .trim_start_matches(|c: char| c.is_digit(10))
+                        .strip_prefix("] runtime error: ")
+                        .unwrap()
+                );
+                eprintln!("{err}");
+                exit(70)
+            }
         },
         Err(err) => {
             eprintln!("{err}");

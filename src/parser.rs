@@ -2,8 +2,12 @@ use std::iter::Peekable;
 
 use thiserror::Error;
 
+use crate::ast::Expr::Binary;
 use crate::ast::Statement::ReturnStatement;
-use crate::ast::{BinaryLogicalOperator, BinaryOperator, Expr, Literal, Statement, UnaryOperator};
+use crate::ast::{
+    BinaryLogicalOperator, BinaryLogicalOperatorType, BinaryOperator, BinaryOperatorType, Expr,
+    Literal, Statement, UnaryOperator, UnaryOperatorType,
+};
 use crate::token::{Token, TokenType};
 
 #[derive(Debug, Error, PartialEq)]
@@ -405,10 +409,13 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
     fn parse_logical_or(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.parse_logical_and()?;
-        while self.match_current(&vec![TokenType::Or]).is_some() {
+        while let Some(token) = self.match_current(&vec![TokenType::Or]) {
             let right = self.parse_logical_and()?;
             expr = Expr::BinaryLogical {
-                operator: BinaryLogicalOperator::Or,
+                operator: BinaryLogicalOperator {
+                    type_: BinaryLogicalOperatorType::Or,
+                    line: token.line,
+                },
                 left: Box::new(expr),
                 right: Box::new(right),
             };
@@ -417,10 +424,13 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
     fn parse_logical_and(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.parse_equality()?;
-        while self.match_current(&vec![TokenType::And]).is_some() {
+        while let Some(token) = self.match_current(&vec![TokenType::And]) {
             let right = self.parse_equality()?;
             expr = Expr::BinaryLogical {
-                operator: BinaryLogicalOperator::And,
+                operator: BinaryLogicalOperator {
+                    type_: BinaryLogicalOperatorType::And,
+                    line: token.line,
+                },
                 left: Box::new(expr),
                 right: Box::new(right),
             };
@@ -675,35 +685,72 @@ struct ErrorProps {
 // 2. Nothing tells us if we forgot one operator. Ideally I'd like to know that all UnaryOperators/BinaryOperators can be produced by these functions.
 fn token_to_unary(token: Token) -> UnaryOperator {
     match token.r#type {
-        TokenType::Minus => UnaryOperator::Minus,
-        TokenType::Bang => UnaryOperator::Not,
+        TokenType::Minus => UnaryOperator {
+            type_: UnaryOperatorType::Minus,
+            line: token.line,
+        },
+        TokenType::Bang => UnaryOperator {
+            type_: UnaryOperatorType::Not,
+            line: token.line,
+        },
         _ => panic!("unable to parse token into unary operator: {:?}", token),
     }
 }
 
 fn token_to_binary(token: Token) -> BinaryOperator {
     match token.r#type {
-        TokenType::Plus => BinaryOperator::Plus,
-        TokenType::Minus => BinaryOperator::Minus,
-        TokenType::Star => BinaryOperator::Multiply,
-        TokenType::Slash => BinaryOperator::Divide,
-        TokenType::EqualEqual => BinaryOperator::Eq,
-        TokenType::BangEqual => BinaryOperator::Neq,
-        TokenType::Greater => BinaryOperator::Gt,
-        TokenType::GreaterEqual => BinaryOperator::Gte,
-        TokenType::Less => BinaryOperator::Lt,
-        TokenType::LessEqual => BinaryOperator::Lte,
+        TokenType::Plus => BinaryOperator {
+            type_: BinaryOperatorType::Plus,
+            line: token.line,
+        },
+        TokenType::Minus => BinaryOperator {
+            type_: BinaryOperatorType::Minus,
+            line: token.line,
+        },
+        TokenType::Star => BinaryOperator {
+            type_: BinaryOperatorType::Multiply,
+            line: token.line,
+        },
+        TokenType::Slash => BinaryOperator {
+            type_: BinaryOperatorType::Divide,
+            line: token.line,
+        },
+        TokenType::EqualEqual => BinaryOperator {
+            type_: BinaryOperatorType::Eq,
+            line: token.line,
+        },
+        TokenType::BangEqual => BinaryOperator {
+            type_: BinaryOperatorType::Neq,
+            line: token.line,
+        },
+        TokenType::Greater => BinaryOperator {
+            type_: BinaryOperatorType::Gt,
+            line: token.line,
+        },
+        TokenType::GreaterEqual => BinaryOperator {
+            type_: BinaryOperatorType::Gte,
+            line: token.line,
+        },
+        TokenType::Less => BinaryOperator {
+            type_: BinaryOperatorType::Lt,
+            line: token.line,
+        },
+        TokenType::LessEqual => BinaryOperator {
+            type_: BinaryOperatorType::Lte,
+            line: token.line,
+        },
         _ => panic!("unable to parse token into binary operator: {:?}", token),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::ast::Expr::Binary;
     use crate::ast::Literal::Number;
     use crate::ast::Statement::{ExprStatement, ReturnStatement};
     use crate::ast::{
-        format_lisp_like, BinaryLogicalOperator, BinaryOperator, Expr, Literal, Statement,
-        UnaryOperator,
+        format_lisp_like, BinaryLogicalOperator, BinaryLogicalOperatorType, BinaryOperator,
+        BinaryOperatorType, Expr, Literal, Statement, UnaryOperator, UnaryOperatorType,
     };
     use crate::parser::{Parser, ParserError};
     use crate::test_helpers::{parse_expr, parse_program, parse_statement};
@@ -730,7 +777,10 @@ mod tests {
         assert_eq!(
             expr,
             Expr::Binary {
-                operator: BinaryOperator::Plus,
+                operator: BinaryOperator {
+                    type_: BinaryOperatorType::Plus,
+                    line: 1
+                },
                 left: Box::new(Expr::Literal(Literal::Number(1.),)),
                 right: Box::new(Expr::Literal(Literal::Number(2.),))
             }
@@ -743,7 +793,10 @@ mod tests {
         assert_eq!(
             expr,
             Expr::BinaryLogical {
-                operator: BinaryLogicalOperator::Or,
+                operator: BinaryLogicalOperator {
+                    type_: BinaryLogicalOperatorType::Or,
+                    line: 1
+                },
                 left: Box::new(Expr::Literal(Literal::Number(1.),)),
                 right: Box::new(Expr::Literal(Literal::Number(2.),))
             }
@@ -756,7 +809,10 @@ mod tests {
         assert_eq!(
             expr,
             Expr::Unary {
-                operator: UnaryOperator::Minus,
+                operator: UnaryOperator {
+                    type_: UnaryOperatorType::Minus,
+                    line: 1
+                },
                 expression: Box::new(Expr::Literal(Literal::Number(2.)))
             }
         )
@@ -858,7 +914,10 @@ mod tests {
                 parameters: vec!["n".to_string(), "debug".to_string()],
                 body: vec![ReturnStatement {
                     expression: Expr::Binary {
-                        operator: BinaryOperator::Plus,
+                        operator: BinaryOperator {
+                            type_: BinaryOperatorType::Plus,
+                            line: 1
+                        },
                         left: Box::from(Expr::Variable {
                             name: "n".to_string()
                         }),

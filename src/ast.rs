@@ -65,34 +65,68 @@ pub enum Expr {
         arguments: Vec<Expr>,
     },
 }
+
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub enum UnaryOperator {
-    Minus,
-    Not,
+pub struct UnaryOperator {
+    pub(crate) type_: UnaryOperatorType,
+    pub(crate) line: usize,
 }
 impl Display for UnaryOperator {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UnaryOperator::Minus => write!(f, "-"),
-            UnaryOperator::Not => write!(f, "!"),
-        }
+        write!(f, "{}", self.type_)
     }
 }
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub enum BinaryLogicalOperator {
+pub enum UnaryOperatorType {
+    Minus,
+    Not,
+}
+impl Display for UnaryOperatorType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnaryOperatorType::Minus => write!(f, "-"),
+            UnaryOperatorType::Not => write!(f, "!"),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub struct BinaryLogicalOperator {
+    pub(crate) type_: BinaryLogicalOperatorType,
+    pub(crate) line: usize,
+}
+impl Display for crate::ast::BinaryLogicalOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.type_)
+    }
+}
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum BinaryLogicalOperatorType {
     Or,
     And,
 }
-impl Display for BinaryLogicalOperator {
+impl Display for BinaryLogicalOperatorType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            BinaryLogicalOperator::Or => write!(f, "or"),
-            BinaryLogicalOperator::And => write!(f, "and"),
+            BinaryLogicalOperatorType::Or => write!(f, "or"),
+            BinaryLogicalOperatorType::And => write!(f, "and"),
         }
     }
 }
+
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub enum BinaryOperator {
+pub struct BinaryOperator {
+    pub(crate) type_: BinaryOperatorType,
+    pub(crate) line: usize,
+}
+impl Display for BinaryOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.type_)
+    }
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum BinaryOperatorType {
     Plus,
     Minus,
     Multiply,
@@ -105,19 +139,19 @@ pub enum BinaryOperator {
     Lte,
 }
 
-impl Display for BinaryOperator {
+impl Display for BinaryOperatorType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            BinaryOperator::Plus => write!(f, "+"),
-            BinaryOperator::Minus => write!(f, "-"),
-            BinaryOperator::Multiply => write!(f, "*"),
-            BinaryOperator::Divide => write!(f, "/"),
-            BinaryOperator::Eq => write!(f, "=="),
-            BinaryOperator::Neq => write!(f, "!="),
-            BinaryOperator::Gt => write!(f, ">"),
-            BinaryOperator::Gte => write!(f, ">="),
-            BinaryOperator::Lt => write!(f, "<"),
-            BinaryOperator::Lte => write!(f, "<="),
+            BinaryOperatorType::Plus => write!(f, "+"),
+            BinaryOperatorType::Minus => write!(f, "-"),
+            BinaryOperatorType::Multiply => write!(f, "*"),
+            BinaryOperatorType::Divide => write!(f, "/"),
+            BinaryOperatorType::Eq => write!(f, "=="),
+            BinaryOperatorType::Neq => write!(f, "!="),
+            BinaryOperatorType::Gt => write!(f, ">"),
+            BinaryOperatorType::Gte => write!(f, ">="),
+            BinaryOperatorType::Lt => write!(f, "<"),
+            BinaryOperatorType::Lte => write!(f, "<="),
         }
     }
 }
@@ -245,9 +279,11 @@ pub fn format_reverse_polish_notation(expr: &Expr) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::ast::Expr::Unary;
     use crate::ast::Literal::Number;
     use crate::ast::{
-        format_lisp_like, format_reverse_polish_notation, BinaryOperator, Expr, UnaryOperator,
+        format_lisp_like, format_reverse_polish_notation, BinaryOperator, BinaryOperatorType, Expr,
+        UnaryOperator, UnaryOperatorType,
     };
 
     fn get_test_expr() -> Expr {
@@ -255,10 +291,16 @@ mod tests {
         // let tokens = tokenize("-123 * (45.67)".to_string(), |err| panic!("{}", err));
         // println!("{tokens:#?}");
         Expr::Binary {
-            operator: BinaryOperator::Multiply,
+            operator: BinaryOperator {
+                type_: BinaryOperatorType::Multiply,
+                line: 1,
+            },
             left: Box::new(Expr::Unary {
                 expression: Box::new(Expr::Literal(Number(123.0))),
-                operator: UnaryOperator::Minus,
+                operator: UnaryOperator {
+                    type_: UnaryOperatorType::Minus,
+                    line: 1,
+                },
             }),
             right: Box::new(Expr::Grouping(Box::new(Expr::Literal(Number(45.67))))),
         }
@@ -274,10 +316,27 @@ mod tests {
 
     /// tedious to write fixtures like this...
     fn get_test_expr_reverse_polish_notation() -> Expr {
-        let left = build_binary(BinaryOperator::Plus, 1., 2.);
-        let right = build_binary(BinaryOperator::Minus, 4., 3.);
+        let left = build_binary(
+            BinaryOperator {
+                type_: BinaryOperatorType::Plus,
+                line: 1,
+            },
+            1.,
+            2.,
+        );
+        let right = build_binary(
+            BinaryOperator {
+                type_: BinaryOperatorType::Minus,
+                line: 1,
+            },
+            4.,
+            3.,
+        );
         return Expr::Binary {
-            operator: BinaryOperator::Multiply,
+            operator: BinaryOperator {
+                type_: BinaryOperatorType::Multiply,
+                line: 1,
+            },
             left: Box::new(Expr::Grouping(Box::new(left))),
             right: Box::new(Expr::Grouping(Box::new(right))),
         };

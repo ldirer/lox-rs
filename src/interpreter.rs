@@ -6,9 +6,12 @@ use std::rc::Rc;
 
 use thiserror::Error;
 
-use BinaryOperator::*;
+use BinaryOperatorType::*;
 
-use crate::ast::{BinaryLogicalOperator, BinaryOperator, Expr, Literal, Statement, UnaryOperator};
+use crate::ast::{
+    BinaryLogicalOperator, BinaryLogicalOperatorType, BinaryOperator, BinaryOperatorType, Expr,
+    Literal, Statement, UnaryOperator, UnaryOperatorType,
+};
 use crate::environment::Environment;
 use crate::interpreter::LoxValue::*;
 
@@ -19,15 +22,31 @@ pub enum InterpreterError {
     // need to get them somehow.
     #[error("operation {operator} not supported between {left:?} and {right:?}")]
     BinaryOperationNotSupported {
-        operator: BinaryOperator,
+        operator: BinaryOperatorType,
         left: LoxValue,
         right: LoxValue,
     },
     #[error("operation {operator} not supported on {operand:?}")]
     UnaryOperationNotSupported {
-        operator: UnaryOperator,
+        operator: UnaryOperatorType,
         operand: LoxValue,
     },
+
+    #[error("[line {line}] runtime error: Operands must be two numbers or two strings.")]
+    BinaryAdditionNotSupported { line: usize },
+    #[error("[line {line}] runtime error: Operands must be numbers.")]
+    BinarySubtractionNotSupported { line: usize },
+    #[error("[line {line}] runtime error: Operands must be numbers.")]
+    BinaryDivisionNotSupported { line: usize },
+    #[error("[line {line}] runtime error: Operands must be numbers.")]
+    BinaryMultiplicationNotSupported { line: usize },
+    #[error("[line {line}] runtime error: Operands must be numbers.")]
+    BinaryComparisonNotSupported { line: usize },
+    #[error("[line {line}] runtime error: Operand must be a number.")]
+    UnaryNegateNotSupported { line: usize },
+
+    #[error("runtime error: Can only call functions and classes.")]
+    CannotCall {},
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -222,7 +241,11 @@ impl<W: Write> Interpreter<W> {
                 Ok(left_hand_side)
             }
             Expr::BinaryLogical {
-                operator: BinaryLogicalOperator::Or,
+                operator:
+                    BinaryLogicalOperator {
+                        type_: BinaryLogicalOperatorType::Or,
+                        ..
+                    },
                 left,
                 right,
             } => {
@@ -234,7 +257,11 @@ impl<W: Write> Interpreter<W> {
                 return Ok(lox_right_value);
             }
             Expr::BinaryLogical {
-                operator: BinaryLogicalOperator::And,
+                operator:
+                    BinaryLogicalOperator {
+                        type_: BinaryLogicalOperatorType::And,
+                        ..
+                    },
                 left,
                 right,
             } => {
@@ -265,7 +292,7 @@ impl<W: Write> Interpreter<W> {
         lox_left: LoxValue,
         lox_right: LoxValue,
     ) -> Result<LoxValue, InterpreterError> {
-        match (lox_left, op, lox_right) {
+        match (lox_left, op.type_, lox_right) {
             (LNumber(left), Plus, LNumber(right)) => Ok(LNumber(left + right)),
             (LNumber(left), Minus, LNumber(right)) => Ok(LNumber(left - right)),
             (LNumber(left), Multiply, LNumber(right)) => Ok(LNumber(left * right)),
@@ -278,9 +305,17 @@ impl<W: Write> Interpreter<W> {
 
             (lox_left, Eq, lox_right) => Ok(LBool(is_equal(lox_left, lox_right))),
             (lox_left, Neq, lox_right) => Ok(LBool(!is_equal(lox_left, lox_right))),
-
+            (_, Plus, _) => Err(InterpreterError::BinaryAdditionNotSupported { line: op.line }),
+            (_, Minus, _) => Err(InterpreterError::BinarySubtractionNotSupported { line: op.line }),
+            (_, Divide, _) => Err(InterpreterError::BinaryDivisionNotSupported { line: op.line }),
+            (_, Multiply, _) => {
+                Err(InterpreterError::BinaryMultiplicationNotSupported { line: op.line })
+            }
+            (_, Gt | Gte | Lt | Lte, _) => {
+                Err(InterpreterError::BinaryComparisonNotSupported { line: op.line })
+            }
             (a, _, b) => Err(InterpreterError::BinaryOperationNotSupported {
-                operator: *op,
+                operator: op.type_,
                 left: a,
                 right: b,
             }),
@@ -294,7 +329,7 @@ impl<W: Write> Interpreter<W> {
     ) -> Result<LoxValue, InterpreterError> {
         match value {
             LFunc(lox_function) => self.interpret_function_call(lox_function, arguments),
-            _ => panic!("cannot call this value {:?}", value),
+            _ => return Err(InterpreterError::CannotCall {}),
         }
     }
 
@@ -343,13 +378,12 @@ impl<W: Write> Interpreter<W> {
         op: &UnaryOperator,
         operand: LoxValue,
     ) -> Result<LoxValue, InterpreterError> {
-        match (op, operand) {
-            (UnaryOperator::Minus, LNumber(num)) => Ok(LNumber(-num)),
-            (UnaryOperator::Not, lox_value) => Ok(LBool(!is_truthy(&lox_value))),
-            (_, operand) => Err(InterpreterError::UnaryOperationNotSupported {
-                operator: *op,
-                operand,
-            }),
+        match (op.type_, operand) {
+            (UnaryOperatorType::Minus, LNumber(num)) => Ok(LNumber(-num)),
+            (UnaryOperatorType::Not, lox_value) => Ok(LBool(!is_truthy(&lox_value))),
+            (UnaryOperatorType::Minus, _) => {
+                Err(InterpreterError::UnaryNegateNotSupported { line: op.line })
+            }
         }
     }
     fn interpret_literal(&self, literal: &Literal) -> LoxValue {
@@ -386,7 +420,7 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    use crate::ast::BinaryOperator::Plus;
+    use crate::ast::BinaryOperatorType::{Multiply, Plus};
     use crate::interpreter::{Interpreter, InterpreterError, LoxEnvironment, LoxValue};
     use crate::test_helpers::{parse_expr, parse_program, parse_statement};
 
@@ -486,11 +520,7 @@ mod tests {
         let lox_error = get_lox_error("true + 1");
         assert_eq!(
             lox_error,
-            InterpreterError::BinaryOperationNotSupported {
-                operator: Plus,
-                left: LoxValue::LBool(true),
-                right: LoxValue::LNumber(1.)
-            }
+            InterpreterError::BinaryAdditionNotSupported { line: 1 }
         );
     }
 
