@@ -335,11 +335,11 @@ impl<W: Write> Interpreter<W> {
         line: usize,
     ) -> Result<LoxValue, InterpreterError> {
         if lox_func.parameters.len() != arguments.len() {
-            InterpreterError::WrongNumberOfArguments {
+            return Err(InterpreterError::WrongNumberOfArguments {
                 line,
                 parameters: lox_func.parameters.len(),
                 arguments: arguments.len(),
-            };
+            });
         }
 
         // copy-pasta, this could be factored out. I wonder if I should be reusing the block interpretation too
