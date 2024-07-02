@@ -101,12 +101,10 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
     fn parse_function_declaration(&mut self) -> Result<Statement, ParserError> {
         let TokenInfo { line, lexeme } = self.get_current_token_info();
-        let name = self
-            .consume(
-                TokenType::Identifier,
-                ParserError::FunctionIdentifierExpected { line, lexeme },
-            )?
-            .lexeme;
+        let name_token = self.consume(
+            TokenType::Identifier,
+            ParserError::FunctionIdentifierExpected { line, lexeme },
+        )?;
 
         let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
@@ -163,9 +161,10 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         )?;
 
         Ok(Statement::FunctionDeclaration {
+            line: name_token.line,
             parameters,
             body,
-            name,
+            name: name_token.lexeme,
         })
     }
 
@@ -178,7 +177,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             Some(Token {
                 r#type: TokenType::Identifier,
                 lexeme: name,
-                line,
+                line: line_declaration,
             }) => {
                 let mut initializer = Expr::Literal(Literal::Nil);
                 if self.match_current(&vec![TokenType::Equal]).is_some() {
@@ -194,7 +193,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 Ok(Statement::VarDeclaration {
                     initializer,
                     name,
-                    line,
+                    line: line_declaration,
                 })
             }
             Some(t) => unreachable!("unexpected token type for {:?}", t),
@@ -926,6 +925,7 @@ mod tests {
         assert_eq!(
             parsed[0],
             Statement::FunctionDeclaration {
+                line: 1,
                 name: "fibonacci".to_string(),
                 parameters: vec!["n".to_string(), "debug".to_string()],
                 body: vec![ReturnStatement {

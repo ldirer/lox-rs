@@ -125,7 +125,14 @@ impl VariableResolver {
                 name,
                 parameters,
                 body,
+                line,
             } => {
+                if let Err(_) = self.declare(name.clone()) {
+                    return Err(VariableResolverError::LocalVariableRedeclaredInScope {
+                        name: name.clone(),
+                        line: *line,
+                    });
+                }
                 self.define(name.clone());
                 self.begin_scope();
                 for parameter in parameters {

@@ -20,6 +20,7 @@ pub enum Statement {
         name: String,
         parameters: Vec<String>,
         body: Vec<Statement>,
+        line: usize,
     },
     ReturnStatement {
         expression: Expr,

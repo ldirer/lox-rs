@@ -179,6 +179,7 @@ impl<W: Write> Interpreter<W> {
                 name,
                 parameters,
                 body,
+                ..
             } => {
                 environment.define(
                     name.clone(),
