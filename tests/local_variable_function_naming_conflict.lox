@@ -1,0 +1,9 @@
+{
+var a = 1;
+
+fun a() {
+    print "function hello";
+}
+
+print a;
+}
