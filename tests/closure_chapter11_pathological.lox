@@ -1,3 +1,4 @@
+print "Expecting 'global global'";
 
 var a = "global";
 {

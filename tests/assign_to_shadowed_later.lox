@@ -1,0 +1,15 @@
+var a = "global";
+
+{
+  fun assign() {
+    a = "assigned";
+  }
+
+  var a = "inner";
+  assign();
+  print "expecting 'inner'";
+  print a; // expect: inner
+}
+
+print "expecting 'assigned'";
+print a; // expect: assigned

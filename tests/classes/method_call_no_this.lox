@@ -1,0 +1,9 @@
+class FirstClass {
+
+  method() {
+    return "ok";
+  }
+}
+
+print "Expecting 'ok'";
+print FirstClass().method();

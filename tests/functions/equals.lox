@@ -1,0 +1,12 @@
+
+fun f() {
+}
+
+fun g() {
+}
+
+
+print "Expecting 'true'";
+print f == f;
+print "Expecting 'false'";
+print f == g;

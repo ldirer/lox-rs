@@ -16,7 +16,9 @@ impl<T: Clone> Environment<T> {
         }
     }
     pub fn define(&self, name: String, value: T) {
-        if self.bindings.borrow().contains_key(&name) {
+        let is_global_environment = self.parent.is_none();
+        // it's fine to redefine a global variable, but not a local one (Lox spec).
+        if self.bindings.borrow().contains_key(&name) && !is_global_environment {
             panic!(
                 "a variable with this name ({}) already exists in this scope",
                 name
@@ -25,16 +27,19 @@ impl<T: Clone> Environment<T> {
         self.bindings.borrow_mut().insert(name, value);
     }
 
-    pub fn assign(&self, name: String, value: T) {
-        if self.bindings.borrow().contains_key(&name) {
-            // overwrite existing value
-            self.bindings.borrow_mut().insert(name, value);
-            return;
+    pub fn assign(&self, name: String, value: T, depth: usize) {
+        if depth == 0 {
+            if self.bindings.borrow().contains_key(&name) {
+                // overwrite existing value
+                self.bindings.borrow_mut().insert(name, value);
+                return;
+            }
+            panic!("variable {name} not defined in current scope");
         }
 
         match &self.parent {
-            None => panic!("variable {name} not defined in current scope"),
-            Some(parent_env) => parent_env.assign(name, value),
+            None => unreachable!("assign failed for {name}! Implementation bug, we should have a parent or depth should be zero (not {depth})"),
+            Some(parent_env) => parent_env.assign(name, value, depth - 1),
         }
     }
 
@@ -84,13 +89,12 @@ mod tests {
         environment.define("a".to_string(), 1);
         assert_eq!(environment.lookup("a".to_string(), 0), 1);
         // change value
-        environment.assign("a".to_string(), 3);
+        environment.assign("a".to_string(), 3, 0);
         assert_eq!(environment.lookup("a".to_string(), 0), 3);
     }
 
     #[test]
-    #[should_panic]
-    fn test_redefine() {
+    fn test_redefine_global() {
         let environment = Environment::<i32>::new(None);
         environment.define("a".to_string(), 1);
         assert_eq!(environment.lookup("a".to_string(), 0), 1);
@@ -98,7 +102,15 @@ mod tests {
         environment.define("a".to_string(), 2);
         assert_eq!(environment.lookup("a".to_string(), 0), 2);
     }
-
+    #[test]
+    #[should_panic]
+    fn test_redefine_local() {
+        let root_env = Environment::<i32>::new(Some(HashMap::from([("a".to_string(), 1)])));
+        let mut env = Environment::<i32>::new(None);
+        env.parent = Some(Rc::new(root_env));
+        env.define("a".to_string(), 1);
+        env.define("a".to_string(), 2);
+    }
     #[test]
     fn test_assign_variable_from_parent_environment() {
         let root_env = Environment::<i32>::new(Some(HashMap::from([("a".to_string(), 1)])));
@@ -107,7 +119,7 @@ mod tests {
         env.parent = Some(Rc::new(root_env));
         assert_eq!(env.lookup("a".to_string(), 1), 1);
 
-        env.assign("a".to_string(), 2);
+        env.assign("a".to_string(), 2, 1);
         assert_eq!(env.lookup("a".to_string(), 1), 2);
     }
 
@@ -123,9 +135,9 @@ mod tests {
         assert_eq!(child_1.lookup("a".to_string(), 1), 1);
         assert_eq!(child_2.lookup("a".to_string(), 1), 1);
 
-        child_1.assign("a".to_string(), 2);
+        child_1.assign("a".to_string(), 2, 1);
         assert_eq!(shared_parent_env.lookup("a".to_string(), 0), 2);
-        child_2.assign("a".to_string(), 3);
+        child_2.assign("a".to_string(), 3, 1);
         assert_eq!(shared_parent_env.lookup("a".to_string(), 0), 3);
     }
 }

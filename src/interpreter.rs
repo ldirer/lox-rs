@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Write;
 use std::iter::zip;
@@ -38,15 +40,23 @@ pub enum InterpreterError {
         arguments: usize,
         line: usize,
     },
+    #[error("[line {line}] runtime error: Undefined property '{name}'.")]
+    UndefinedProperty { name: String, line: usize },
+    #[error("[line {line}] runtime error: Only instances have properties.")]
+    OnlyInstancesHaveProperties { line: usize, name: String },
+    #[error("[line {line}] runtime error: Only instances have fields.")]
+    SetPropertyOnlyWorksOnInstances { line: usize, lexeme: String },
 }
 
 #[derive(Debug, PartialEq, Clone)]
 enum LoxValue {
-    LFunc(LoxFunction),
     LString(String),
     LNumber(f64),
     LBool(bool),
     LNil,
+    LFunc(LoxFunction),
+    LClass(Rc<LoxClass>),
+    LInstance(Rc<LoxInstance>),
 }
 
 impl Display for LoxValue {
@@ -57,6 +67,8 @@ impl Display for LoxValue {
             LNumber(n) => write!(f, "{}", n),
             LBool(b) => write!(f, "{}", b),
             LNil => write!(f, "nil"),
+            LClass(class) => write!(f, "class {}", class.name),
+            LInstance(instance) => write!(f, "{} instance", instance.class.name),
         }
     }
 }
@@ -83,6 +95,64 @@ impl Debug for LoxFunction {
 impl PartialEq for LoxFunction {
     fn eq(&self, other: &LoxFunction) -> bool {
         self.name == other.name && self.parameters == other.parameters && self.body == other.body
+    }
+}
+
+#[derive(Clone)]
+struct LoxClass {
+    name: String,
+    environment: Rc<LoxEnvironment>,
+    methods: HashMap<String, LoxValue>,
+}
+
+impl Debug for LoxClass {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LoxClass")
+            .field("name", &self.name)
+            .finish()
+    }
+}
+
+/// for testing only
+impl PartialEq for LoxClass {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+#[derive(Clone, PartialEq, Debug)]
+struct LoxInstance {
+    class: Rc<LoxClass>,
+    fields: RefCell<HashMap<String, LoxValue>>,
+}
+
+impl LoxInstance {
+    fn new(class: Rc<LoxClass>) -> LoxInstance {
+        LoxInstance {
+            class,
+            fields: RefCell::new(HashMap::new()),
+        }
+    }
+
+    pub(crate) fn set_field(&self, name: String, value: LoxValue) {
+        self.fields.borrow_mut().insert(name, value);
+    }
+    pub(crate) fn get_field_or_method(
+        &self,
+        name: &String,
+        line: usize,
+    ) -> Result<LoxValue, InterpreterError> {
+        if let Some(value) = self.fields.borrow().get(name) {
+            return Ok(value.clone());
+        }
+
+        if let Some(value) = self.class.methods.get(name) {
+            return Ok(value.clone());
+        }
+
+        return Err(InterpreterError::UndefinedProperty {
+            name: name.clone(),
+            line,
+        });
     }
 }
 
@@ -192,6 +262,33 @@ impl<W: Write> Interpreter<W> {
                 );
                 Ok(None)
             }
+            Statement::ClassDeclaration {
+                name,
+                methods,
+                line,
+            } => {
+                // defining first so the name exists and methods can refer to it.
+                environment.define(name.clone(), LoxValue::LNil);
+                let mut lox_methods = HashMap::new();
+                for statement in methods {
+                    match statement {
+                        Statement::FunctionDeclaration { name, parameters, body, line } => {
+                            let method = LFunc(LoxFunction{name: name.clone(), parameters: parameters.clone(), body: body.clone(), environment: environment.clone() });
+                            lox_methods.insert(name.clone(), method);
+                        }
+                        _ => panic!("internal error: interpreter expects only function declarations in a class declaration node")
+                    };
+                }
+
+                let class = LoxValue::LClass(Rc::from(LoxClass {
+                    name: name.clone(),
+                    environment: environment.clone(),
+                    methods: lox_methods,
+                }));
+                environment.assign(name.clone(), class, 0);
+
+                Ok(None)
+            }
             Statement::ReturnStatement { expression } => {
                 let lox_value = self.interpret_expression(expression, environment.clone())?;
                 Ok(Some(lox_value))
@@ -230,11 +327,15 @@ impl<W: Write> Interpreter<W> {
                 depth,
                 line: _line,
             } => Ok(environment.lookup(name.clone(), depth.unwrap())),
-            Expr::Assign { name, value } => {
-                let left_hand_side = self.interpret_expression(value, environment.clone())?;
-                environment.assign(name.clone(), left_hand_side.clone());
-                // there's probably something wrong here about cloning if the value is mutable.
-                Ok(left_hand_side)
+            Expr::Assign { location, value } => {
+                let right_hand_side = self.interpret_expression(&value, environment.clone())?;
+                match location.as_ref() {
+                    Expr::Variable { depth, line, name } => {
+                        environment.assign(name.clone(), right_hand_side.clone(), depth.unwrap())
+                    }
+                    _ => panic!("assignment to location of this type not handled ({location:?})"),
+                }
+                Ok(right_hand_side)
             }
             Expr::BinaryLogical {
                 operator:
@@ -283,6 +384,37 @@ impl<W: Write> Interpreter<W> {
                 }
                 self.interpret_call(&lox_func, args.unwrap(), *line)
             }
+            Expr::PropertyAccess { object, name, line } => {
+                let lox_obj = self.interpret_expression(object, environment.clone())?;
+                match lox_obj {
+                    LInstance(lox_instance) => lox_instance.get_field_or_method(name, *line),
+                    _ => Err(InterpreterError::OnlyInstancesHaveProperties {
+                        line: *line,
+                        name: name.clone(),
+                    }),
+                }
+            }
+            Expr::Set {
+                object,
+                name,
+                value,
+                line,
+            } => {
+                let lox_object = self.interpret_expression(object, environment.clone())?;
+                let lox_value = self.interpret_expression(value, environment.clone())?;
+                match lox_object {
+                    LInstance(mut lox_instance) => {
+                        // TODO at some point add a test where we have an instance and put it as field on another instance.
+                        // then change the field instance. Does it change the other one? It should (I think).
+                        lox_instance.set_field(name.clone(), lox_value.clone());
+                        Ok(lox_value)
+                    }
+                    _ => Err(InterpreterError::SetPropertyOnlyWorksOnInstances {
+                        line: *line,
+                        lexeme: name.clone(),
+                    }),
+                }
+            }
         }
     }
 
@@ -325,6 +457,7 @@ impl<W: Write> Interpreter<W> {
     ) -> Result<LoxValue, InterpreterError> {
         match value {
             LFunc(lox_function) => self.interpret_function_call(lox_function, arguments, line),
+            LClass(lox_class) => self.interpret_class_call(lox_class.clone(), arguments, line),
             _ => return Err(InterpreterError::CannotCall { line }),
         }
     }
@@ -363,6 +496,17 @@ impl<W: Write> Interpreter<W> {
         Ok(LoxValue::LNil)
     }
 
+    fn interpret_class_call(
+        &mut self,
+        lox_class: Rc<LoxClass>,
+        arguments: Vec<LoxValue>,
+        line: usize,
+    ) -> Result<LoxValue, InterpreterError> {
+        Ok(LoxValue::LInstance(Rc::new(LoxInstance::new(
+            lox_class.clone(),
+        ))))
+    }
+
     fn interpret_unary(
         &self,
         op: &UnaryOperator,
@@ -393,6 +537,11 @@ fn is_equal(left: LoxValue, right: LoxValue) -> bool {
         (LBool(l), LBool(r)) => l == r,
         (LNumber(l), LNumber(r)) => l == r,
         (LString(l), LString(r)) => l == r,
+        (LFunc(l), LFunc(r)) => l == r,
+        (LClass(l), LClass(r)) => l == r,
+        (LInstance(l), LInstance(r)) => l == r,
+        // this 'catch all' arm is a bit unfortunate: nothing tells us we are forgetting to add cases if we add a variant to LoxValue
+        // not sure how to do differently though, don't want to enumerate all cases explicitly.
         (_, _) => false,
     }
 }
@@ -470,8 +619,8 @@ mod tests {
             ("3 != \"ok\"", LoxValue::LBool(true)),
             ("nil == false", LoxValue::LBool(false)),
             ("nil == nil", LoxValue::LBool(true)),
-            ("3 == 3.", LoxValue::LBool(true)),
-            ("3 == 4.", LoxValue::LBool(false)),
+            ("3 == 3.0", LoxValue::LBool(true)),
+            ("3 == 4.0", LoxValue::LBool(false)),
         ];
         input_and_expected.into_iter().for_each(|(code, expected)| {
             dbg!(code, &expected);

@@ -1,0 +1,8 @@
+class FirstClass {
+
+  method() {
+    return 1;
+  }
+}
+
+print FirstClass;

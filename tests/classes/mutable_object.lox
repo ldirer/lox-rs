@@ -1,0 +1,11 @@
+class A {}
+
+var a = A();
+var b = A();
+
+b.field_b = a;
+
+b.field_b.field_a = "should mutate original";
+
+print "expecting 'should mutate original'";
+print a.field_a;

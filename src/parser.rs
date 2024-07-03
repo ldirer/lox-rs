@@ -5,7 +5,7 @@ use thiserror::Error;
 use crate::ast::Statement::ReturnStatement;
 use crate::ast::{
     BinaryLogicalOperator, BinaryLogicalOperatorType, BinaryOperator, BinaryOperatorType, Expr,
-    Literal, Statement, UnaryOperator, UnaryOperatorType,
+    FunctionType, Literal, Statement, UnaryOperator, UnaryOperatorType,
 };
 use crate::token::{Token, TokenType};
 
@@ -43,23 +43,60 @@ pub enum ParserError {
     MissingClosingParenthesisFor { line: usize, lexeme: String },
     #[error("[line {line}] Error at '{lexeme}': Expect ')' after call arguments.")]
     MissingClosingParenthesisInCall { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect function name.")]
-    FunctionIdentifierExpected { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect '(' after function name.")]
-    MissingOpeningParenthesisFunction { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect function parameter identifier.")]
-    FunctionExpectedParameterName { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect ')' after function parameters.")]
-    MissingClosingParenthesisFunction { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect '{{' before function body.")]
-    MissingOpeningBraceFunction { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect '}}' to close function body.")]
-    MissingClosingBraceFunction { line: usize, lexeme: String },
+    #[error("[line {line}] Error at '{lexeme}': Expect {function_type} name.")]
+    FunctionIdentifierExpected {
+        function_type: FunctionType,
+        line: usize,
+        lexeme: String,
+    },
+    #[error("[line {line}] Error at '{lexeme}': Expect class name.")]
+    ClassIdentifierExpected { line: usize, lexeme: String },
+    #[error("[line {line}] Error at '{lexeme}': Expect '{{' after class name.")]
+    MissingOpeningBraceClass { line: usize, lexeme: String },
+    #[error("[line {line}] Error at '{lexeme}': Expect '}}' after method declarations.")]
+    MissingClosingBraceClass { line: usize, lexeme: String },
+
+    #[error("[line {line}] Error at '{lexeme}': Expect '(' after {function_type} name.")]
+    MissingOpeningParenthesisFunction {
+        function_type: FunctionType,
+        line: usize,
+        lexeme: String,
+    },
+    #[error("[line {line}] Error at '{lexeme}': Expect {function_type} parameter identifier.")]
+    FunctionExpectedParameterName {
+        function_type: FunctionType,
+        line: usize,
+        lexeme: String,
+    },
+    #[error("[line {line}] Error at '{lexeme}': Expect ')' after {function_type} parameters.")]
+    MissingClosingParenthesisFunction {
+        function_type: FunctionType,
+        line: usize,
+        lexeme: String,
+    },
+    #[error("[line {line}] Error at '{lexeme}': Expect '{{' before {function_type} body.")]
+    MissingOpeningBraceFunction {
+        function_type: FunctionType,
+        line: usize,
+        lexeme: String,
+    },
+    #[error("[line {line}] Error at '{lexeme}': Expect '}}' to close {function_type} body.")]
+    MissingClosingBraceFunction {
+        function_type: FunctionType,
+        line: usize,
+        lexeme: String,
+    },
 
     #[error("[line {line}] Error at '{lexeme}': Expect expression.")]
     ExpectExpression { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect expression.")]
-    FunctionTooManyArguments { line: usize, lexeme: String },
+    #[error("[line {line}] Error at '{lexeme}': Too many arguments.")]
+    FunctionTooManyArguments {
+        function_type: FunctionType,
+        line: usize,
+        lexeme: String,
+    },
+    #[error("[line {line}] Error at '{lexeme}': Expect property name after '.'.")]
+    ExpectPropertyAccessName { line: usize, lexeme: String },
 }
 
 pub struct Parser<T: Iterator<Item = Token>> {
@@ -91,7 +128,11 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
     pub fn parse_declaration(&mut self) -> Result<Statement, ParserError> {
         if self.match_current(&vec![TokenType::Fun]).is_some() {
-            return self.parse_function_declaration();
+            return self.parse_function_declaration(FunctionType::Function);
+        }
+
+        if self.match_current(&vec![TokenType::Class]).is_some() {
+            return self.parse_class_declaration();
         }
         match self.match_current(&vec![TokenType::Var]) {
             Some(_) => self.parse_var_declaration(),
@@ -99,17 +140,59 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         }
     }
 
-    fn parse_function_declaration(&mut self) -> Result<Statement, ParserError> {
+    fn parse_class_declaration(&mut self) -> Result<Statement, ParserError> {
         let TokenInfo { line, lexeme } = self.get_current_token_info();
         let name_token = self.consume(
             TokenType::Identifier,
-            ParserError::FunctionIdentifierExpected { line, lexeme },
+            ParserError::ClassIdentifierExpected { line, lexeme },
+        )?;
+
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
+        self.consume(
+            TokenType::LeftBrace,
+            ParserError::MissingOpeningBraceClass { line, lexeme },
+        )?;
+
+        let mut methods = vec![];
+        while !self.is_at_end() && self.check(TokenType::RightBrace).is_none() {
+            methods.push(self.parse_function_declaration(FunctionType::Method)?);
+        }
+
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
+        self.consume(
+            TokenType::RightBrace,
+            ParserError::MissingClosingBraceClass { line, lexeme },
+        )?;
+
+        Ok(Statement::ClassDeclaration {
+            name: name_token.lexeme,
+            line: name_token.line,
+            methods,
+        })
+    }
+
+    fn parse_function_declaration(
+        &mut self,
+        function_type: FunctionType,
+    ) -> Result<Statement, ParserError> {
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
+        let name_token = self.consume(
+            TokenType::Identifier,
+            ParserError::FunctionIdentifierExpected {
+                function_type,
+                line,
+                lexeme,
+            },
         )?;
 
         let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
             TokenType::LeftParen,
-            ParserError::MissingOpeningParenthesisFunction { line, lexeme },
+            ParserError::MissingOpeningParenthesisFunction {
+                function_type,
+                line,
+                lexeme,
+            },
         )?;
         let mut parameters = vec![];
         if self
@@ -123,13 +206,18 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 match token {
                     None => {
                         let TokenInfo { line, lexeme } = self.get_current_token_info();
-                        return Err(ParserError::FunctionExpectedParameterName { line, lexeme });
+                        return Err(ParserError::FunctionExpectedParameterName {
+                            function_type,
+                            line,
+                            lexeme,
+                        });
                     }
                     Some(t) => {
                         if parameters.len() >= 255 {
                             // we should not stop parsing here. We want to report the error but the parsing is in a clean state.
                             // looks like this is a bit tricky, leaving it aside for now.
                             return Err(ParserError::FunctionTooManyArguments {
+                                function_type,
                                 line: t.line,
                                 lexeme: t.lexeme.clone(),
                             });
@@ -146,18 +234,30 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
             TokenType::RightParen,
-            ParserError::MissingClosingParenthesisFunction { line, lexeme },
+            ParserError::MissingClosingParenthesisFunction {
+                function_type,
+                line,
+                lexeme,
+            },
         )?;
         let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
             TokenType::LeftBrace,
-            ParserError::MissingOpeningBraceFunction { line, lexeme },
+            ParserError::MissingOpeningBraceFunction {
+                function_type,
+                line,
+                lexeme,
+            },
         )?;
         let body = self.parse_block()?;
         let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
             TokenType::RightBrace,
-            ParserError::MissingClosingBraceFunction { line, lexeme },
+            ParserError::MissingClosingBraceFunction {
+                function_type,
+                line,
+                lexeme,
+            },
         )?;
 
         Ok(Statement::FunctionDeclaration {
@@ -404,11 +504,20 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         let expr = self.parse_logical_or()?;
         match (self.match_current(&vec![TokenType::Equal]), &expr) {
             (None, _) => Ok(expr),
-            (Some(_), Expr::Variable { name, .. }) => {
+            (Some(_), Expr::Variable { .. }) => {
                 let value = self.parse_assignment()?;
                 Ok(Expr::Assign {
+                    location: Box::from(expr),
+                    value: Box::new(value),
+                })
+            }
+            (Some(_), Expr::PropertyAccess { object, name, line }) => {
+                let value = self.parse_assignment()?;
+                Ok(Expr::Set {
+                    object: object.clone(),
                     name: name.clone(),
                     value: Box::new(value),
+                    line: *line,
                 })
             }
             (Some(token), _) => Err(ParserError::InvalidAssignmentTarget {
@@ -526,30 +635,53 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
     fn parse_call(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.parse_primary()?;
-        while self.match_current(&vec![TokenType::LeftParen]).is_some() {
-            let mut args = vec![];
-            if self
-                .tokens
-                .peek()
-                .is_some_and(|t| t.r#type != TokenType::RightParen)
-            {
-                args.push(self.parse_expression()?);
-                while self.match_current(&vec![TokenType::Comma]).is_some() {
-                    args.push(self.parse_expression()?);
+        // reminder that this is a while loop because we match chained calls
+        loop {
+            if self.match_current(&vec![TokenType::Dot]).is_some() {
+                let TokenInfo { line, lexeme } = self.get_current_token_info();
+                let identifier = self.consume(
+                    TokenType::Identifier,
+                    ParserError::ExpectPropertyAccessName { line, lexeme },
+                )?;
+                expr = Expr::PropertyAccess {
+                    object: Box::new(expr),
+                    line: identifier.line,
+                    name: identifier.lexeme,
                 }
+            } else if let Some(parenthesis_token) = self.match_current(&vec![TokenType::LeftParen])
+            {
+                let args = self.parse_function_arguments()?;
+                expr = Expr::FunctionCall {
+                    line: parenthesis_token.line,
+                    callee: Box::new(expr),
+                    arguments: args,
+                };
+            } else {
+                break;
             }
-            let TokenInfo { line, lexeme } = self.get_current_token_info();
-            self.consume(
-                TokenType::RightParen,
-                ParserError::MissingClosingParenthesisInCall { line, lexeme },
-            )?;
-            expr = Expr::FunctionCall {
-                line,
-                callee: Box::new(expr),
-                arguments: args,
-            };
         }
         Ok(expr)
+    }
+
+    fn parse_function_arguments(&mut self) -> Result<Vec<Expr>, ParserError> {
+        let mut args = vec![];
+        if self
+            .tokens
+            .peek()
+            .is_some_and(|t| t.r#type != TokenType::RightParen)
+        {
+            args.push(self.parse_expression()?);
+            while self.match_current(&vec![TokenType::Comma]).is_some() {
+                args.push(self.parse_expression()?);
+            }
+        }
+        let TokenInfo { line, lexeme } = self.get_current_token_info();
+        self.consume(
+            TokenType::RightParen,
+            ParserError::MissingClosingParenthesisInCall { line, lexeme },
+        )?;
+
+        Ok(args)
     }
 
     fn parse_primary(&mut self) -> Result<Expr, ParserError> {
@@ -605,6 +737,9 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             }
         }
         None
+    }
+    fn check(&mut self, token_type: TokenType) -> Option<&Token> {
+        self.tokens.peek().filter(|t| t.r#type == token_type)
     }
 
     fn advance(&mut self) -> Option<Token> {
@@ -960,7 +1095,11 @@ mod tests {
             ExprStatement {
                 expression: Expr::Assign {
                     value: Box::from(Expr::Literal(Number(3.))),
-                    name: "a".to_string()
+                    location: Box::from(Expr::Variable {
+                        name: "a".to_string(),
+                        line: 1,
+                        depth: None,
+                    })
                 }
             }
         );
@@ -998,6 +1137,83 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_property_access() {
+        let parsed = parse_expr("a.b").unwrap();
+        assert_eq!(
+            parsed,
+            Expr::PropertyAccess {
+                object: Box::new(Expr::Variable {
+                    depth: None,
+                    line: 1,
+                    name: "a".to_string()
+                }),
+                name: "b".to_string(),
+                line: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn test_class_declaration() {
+        let parsed = parse_program("class Math {method(){}}").unwrap();
+        assert_eq!(
+            parsed[0],
+            Statement::ClassDeclaration {
+                name: "Math".to_string(),
+                methods: vec![Statement::FunctionDeclaration {
+                    name: "method".to_string(),
+                    parameters: vec![],
+                    body: vec![],
+                    line: 1,
+                }],
+                line: 1,
+            }
+        );
+    }
+    #[test]
+    fn test_class_declaration_unfinished() {
+        let parsed = parse_program("class Math { method() {}");
+        assert!(parsed.is_err());
+        assert_eq!(
+            parsed.unwrap_err(),
+            ParserError::MissingClosingBraceClass {
+                lexeme: "end".to_string(),
+                line: 1
+            }
+        );
+    }
+
+    #[test]
+    fn test_set_expression() {
+        let parsed = parse_expr("breakfast.omelette.filling.meat = ham").unwrap();
+        println!("{:#?}", parsed);
+        assert_eq!(
+            parsed,
+            Expr::Set {
+                object: Box::new(Expr::PropertyAccess {
+                    object: Box::new(Expr::PropertyAccess {
+                        object: Box::new(Expr::Variable {
+                            depth: None,
+                            line: 1,
+                            name: "breakfast".to_string()
+                        }),
+                        name: "omelette".to_string(),
+                        line: 1,
+                    }),
+                    name: "filling".to_string(),
+                    line: 1,
+                }),
+                name: "meat".to_string(),
+                line: 1,
+                value: Box::new(Expr::Variable {
+                    name: "ham".to_string(),
+                    line: 1,
+                    depth: None
+                }),
+            }
+        );
+    }
     #[test]
     fn test_program() {
         // let parsed = parse_program("print 2;").unwrap();

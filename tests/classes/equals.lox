@@ -1,0 +1,4 @@
+
+class A {}
+print "expecting 'true'";
+print A == A;

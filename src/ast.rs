@@ -16,6 +16,12 @@ pub enum Statement {
         initializer: Expr,
         line: usize,
     },
+    ClassDeclaration {
+        name: String,
+        // methods should contain only FunctionDeclaration objects
+        methods: Vec<Statement>,
+        line: usize,
+    },
     FunctionDeclaration {
         name: String,
         parameters: Vec<String>,
@@ -39,8 +45,14 @@ pub enum Statement {
 }
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
-    Assign {
+    Set {
+        object: Box<Expr>,
         name: String,
+        value: Box<Expr>,
+        line: usize,
+    },
+    Assign {
+        location: Box<Expr>,
         value: Box<Expr>,
     },
     BinaryLogical {
@@ -69,6 +81,11 @@ pub enum Expr {
         line: usize,
         callee: Box<Expr>,
         arguments: Vec<Expr>,
+    },
+    PropertyAccess {
+        object: Box<Expr>,
+        name: String,
+        line: usize,
     },
 }
 
@@ -178,6 +195,21 @@ impl Display for Literal {
             Literal::True => write!(f, "true"),
             Literal::False => write!(f, "false"),
             Literal::Nil => write!(f, "nil"),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum FunctionType {
+    Function,
+    Method,
+}
+
+impl Display for FunctionType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FunctionType::Function => write!(f, "function"),
+            FunctionType::Method => write!(f, "method"),
         }
     }
 }

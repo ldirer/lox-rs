@@ -41,8 +41,12 @@ impl VariableResolver {
     }
 
     fn declare(&mut self, name: String) -> Result<(), String> {
+        let is_global = self.scope_stack.len() == 1;
         let mut scope = self.scope_stack.last_mut().unwrap();
-        if scope.get(&name).unwrap_or(&VariableStatus::Unknown) != &VariableStatus::Unknown {
+        // it's ok to re-declare a global variable.
+        if scope.get(&name).unwrap_or(&VariableStatus::Unknown) != &VariableStatus::Unknown
+            && !is_global
+        {
             return Err("variable redeclared!".to_string());
         }
         scope.insert(name, VariableStatus::Declared);
@@ -156,6 +160,22 @@ impl VariableResolver {
             | Statement::ReturnStatement { expression } => {
                 self.resolve_expr(expression)?;
             }
+            Statement::ClassDeclaration {
+                name,
+                methods,
+                line,
+            } => {
+                if let Err(_) = self.declare(name.clone()) {
+                    return Err(VariableResolverError::LocalVariableRedeclaredInScope {
+                        name: name.clone(),
+                        line: *line,
+                    });
+                }
+                self.define(name.clone());
+                for statement in methods {
+                    self.resolve_statement(statement)?;
+                }
+            }
         }
         Ok(())
     }
@@ -165,8 +185,9 @@ impl VariableResolver {
             Expr::Literal(_) => {
                 return Ok(());
             }
-            Expr::Assign { value, .. } => {
+            Expr::Assign { location, value } => {
                 // interestingly, there isn't much to do here.
+                self.resolve_expr(location)?;
                 self.resolve_expr(value)?;
             }
             Expr::BinaryLogical { left, right, .. } | Expr::Binary { left, right, .. } => {
@@ -198,6 +219,13 @@ impl VariableResolver {
                 for argument in arguments {
                     self.resolve_expr(argument)?;
                 }
+            }
+            Expr::PropertyAccess { object, .. } => {
+                self.resolve_expr(object)?;
+            }
+            Expr::Set { object, value, .. } => {
+                self.resolve_expr(object)?;
+                self.resolve_expr(value)?;
             }
         };
         Ok(())

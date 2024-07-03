@@ -1,0 +1,7 @@
+class A {
+}
+
+var a = A();
+a.first_field = "ok";
+
+print a.first_field;
