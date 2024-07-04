@@ -26,12 +26,22 @@ struct Scanner<'a> {
 
 #[derive(Debug, Error)]
 pub enum ScanningError {
-    #[error("Unexpected character {character:?}")]
+    #[error("Unexpected character.")]
     UnexpectedCharacter { line: usize, character: char },
-    #[error("Unterminated string {string_start:?}")]
+    #[error("Unterminated string.")]
     UnterminatedString { line: usize, string_start: String },
-    #[error("Unterminated block comment {comment_start:?}")]
+    #[error("Unterminated block comment.")]
     UnterminatedBlockComment { line: usize, comment_start: String },
+}
+impl ScanningError {
+    // not sure how I feel about this. But also wrapping the error in yet another struct feels bad.
+    pub fn get_line(&self) -> usize {
+        match self {
+            ScanningError::UnexpectedCharacter { line, .. }
+            | ScanningError::UnterminatedString { line, .. }
+            | ScanningError::UnterminatedBlockComment { line, .. } => *line,
+        }
+    }
 }
 
 impl Scanner<'_> {

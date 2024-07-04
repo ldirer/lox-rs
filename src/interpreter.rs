@@ -75,7 +75,7 @@ enum LoxValue {
 impl Display for LoxValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            LFunc(func) => write!(f, "fun {}\n", func.name),
+            LFunc(func) => write!(f, "<fn {}>\n", func.name),
             LString(s) => write!(f, "{}", s),
             LNumber(n) => write!(f, "{}", n),
             LBool(b) => write!(f, "{}", b),

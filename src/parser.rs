@@ -22,7 +22,7 @@ pub enum ParserError {
     MissingSemicolonExpressionStatement { line: usize, lexeme: String },
     #[error("[line {line}] Error at '{lexeme}': Expect ';' after loop condition.")]
     MissingSemicolonLoopCondition { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': invalid syntax for variable declaration.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect variable name.")]
     InvalidSyntaxVarDeclaration { line: usize, lexeme: String },
     #[error("[line {line}] Error at '{lexeme}': Expect ';' after variable declaration.")]
     MissingSemicolonVariableDeclaration { line: usize, lexeme: String },

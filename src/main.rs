@@ -124,23 +124,11 @@ fn run(source: String) {
 }
 
 fn scanner_error(err: ScanningError) {
-    match err {
-        ScanningError::UnexpectedCharacter { line, character: _ } => {
-            report(line, "", &format!("Scanner error: {err}"))
-        }
-        ScanningError::UnterminatedString {
-            line,
-            string_start: _,
-        } => report(line, "", &format!("Scanner error: {err}")),
-        ScanningError::UnterminatedBlockComment {
-            line,
-            comment_start: _,
-        } => report(line, "", &format!("Scanner error: {err}")),
-    }
+    report(err.get_line(), "", &format!("{err}"));
 }
 
 fn report(line: usize, location: &str, message: &str) {
-    eprintln!("[line {line}] Error {location}: {message}");
+    eprintln!("[line {line}] Error{location}: {message}");
     exit(65)
     //     TODO had_error = true
 }
