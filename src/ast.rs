@@ -71,6 +71,9 @@ pub enum Expr {
         right: Box<Expr>,
     },
     Grouping(Box<Expr>),
+    // This is a special case of Variable. I think it helps to have it separate to handle errors like usage outside a class.
+    // making this a wrapper around variable for convenience (so everything goes through the resolver the same way) but it's a bit lame.
+    This(Box<Expr>),
     Variable {
         // depth is ignored by the parser and populated later by the resolver
         depth: Option<usize>,

@@ -692,6 +692,11 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         }
         let token = token.unwrap();
         match token.r#type {
+            TokenType::This => Ok(Expr::This(Box::new(Expr::Variable {
+                line: token.line,
+                name: "this".to_string(),
+                depth: None,
+            }))),
             TokenType::Identifier => Ok(Expr::Variable {
                 name: token.lexeme,
                 line: token.line,

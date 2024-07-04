@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Write;
@@ -54,7 +55,7 @@ enum LoxValue {
     LNumber(f64),
     LBool(bool),
     LNil,
-    LFunc(LoxFunction),
+    LFunc(Rc<LoxFunction>),
     LClass(Rc<LoxClass>),
     LInstance(Rc<LoxInstance>),
 }
@@ -91,10 +92,13 @@ impl Debug for LoxFunction {
     }
 }
 
-/// For testing convenience. Because LoxFunction is used in an enum for which I want PartialEq.
+/// We compare environments by pointer to match the book.
 impl PartialEq for LoxFunction {
     fn eq(&self, other: &LoxFunction) -> bool {
-        self.name == other.name && self.parameters == other.parameters && self.body == other.body
+        self.name == other.name
+            && self.parameters == other.parameters
+            && self.body == other.body
+            && std::ptr::eq(&self.environment, &other.environment)
     }
 }
 
@@ -102,7 +106,7 @@ impl PartialEq for LoxFunction {
 struct LoxClass {
     name: String,
     environment: Rc<LoxEnvironment>,
-    methods: HashMap<String, LoxValue>,
+    methods: HashMap<String, Rc<LoxFunction>>,
 }
 
 impl Debug for LoxClass {
@@ -113,10 +117,9 @@ impl Debug for LoxClass {
     }
 }
 
-/// for testing only
 impl PartialEq for LoxClass {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
+        std::ptr::eq(self, other)
     }
 }
 #[derive(Clone, PartialEq, Debug)]
@@ -140,13 +143,23 @@ impl LoxInstance {
         &self,
         name: &String,
         line: usize,
+        self_rc: Rc<LoxInstance>,
     ) -> Result<LoxValue, InterpreterError> {
         if let Some(value) = self.fields.borrow().get(name) {
             return Ok(value.clone());
         }
 
         if let Some(value) = self.class.methods.get(name) {
-            return Ok(value.clone());
+            // Add "this" to the environment so the function returned is a "bound method"
+            let mut closure_env = LoxEnvironment::new(None);
+            closure_env.parent = Some(value.environment.clone());
+            closure_env.define("this".to_string(), LInstance(self_rc.clone()));
+            return Ok(LFunc(Rc::new(LoxFunction {
+                environment: Rc::new(closure_env),
+                name: value.name.clone(),
+                parameters: value.parameters.clone(),
+                body: value.body.clone(),
+            })));
         }
 
         return Err(InterpreterError::UndefinedProperty {
@@ -253,12 +266,12 @@ impl<W: Write> Interpreter<W> {
             } => {
                 environment.define(
                     name.clone(),
-                    LoxValue::LFunc(LoxFunction {
+                    LoxValue::LFunc(Rc::new(LoxFunction {
                         name: name.clone(),
                         parameters: parameters.clone(),
                         body: body.clone(),
                         environment: environment.clone(),
-                    }),
+                    })),
                 );
                 Ok(None)
             }
@@ -273,8 +286,8 @@ impl<W: Write> Interpreter<W> {
                 for statement in methods {
                     match statement {
                         Statement::FunctionDeclaration { name, parameters, body, line } => {
-                            let method = LFunc(LoxFunction{name: name.clone(), parameters: parameters.clone(), body: body.clone(), environment: environment.clone() });
-                            lox_methods.insert(name.clone(), method);
+                            let method = LoxFunction{name: name.clone(), parameters: parameters.clone(), body: body.clone(), environment: environment.clone() };
+                            lox_methods.insert(name.clone(), Rc::new(method));
                         }
                         _ => panic!("internal error: interpreter expects only function declarations in a class declaration node")
                     };
@@ -327,6 +340,7 @@ impl<W: Write> Interpreter<W> {
                 depth,
                 line: _line,
             } => Ok(environment.lookup(name.clone(), depth.unwrap())),
+            Expr::This(variable) => self.interpret_expression(variable, environment.clone()),
             Expr::Assign { location, value } => {
                 let right_hand_side = self.interpret_expression(&value, environment.clone())?;
                 match location.as_ref() {
@@ -387,7 +401,9 @@ impl<W: Write> Interpreter<W> {
             Expr::PropertyAccess { object, name, line } => {
                 let lox_obj = self.interpret_expression(object, environment.clone())?;
                 match lox_obj {
-                    LInstance(lox_instance) => lox_instance.get_field_or_method(name, *line),
+                    LInstance(lox_instance) => {
+                        lox_instance.get_field_or_method(name, *line, lox_instance.clone())
+                    }
                     _ => Err(InterpreterError::OnlyInstancesHaveProperties {
                         line: *line,
                         name: name.clone(),

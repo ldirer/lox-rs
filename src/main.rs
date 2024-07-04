@@ -99,6 +99,7 @@ fn run(source: String) {
                 eprintln!("{err}");
                 exit(65)
             }
+            // println!("{:#?}", statements);
             match interpreter.interpret_program(&statements) {
                 Ok(_) => {}
                 Err(err) => {

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::ast::{Expr, Statement};
+use crate::ast::{Expr, FunctionType, Statement};
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 enum VariableStatus {
@@ -131,22 +131,13 @@ impl VariableResolver {
                 body,
                 line,
             } => {
-                if let Err(_) = self.declare(name.clone()) {
-                    return Err(VariableResolverError::LocalVariableRedeclaredInScope {
-                        name: name.clone(),
-                        line: *line,
-                    });
-                }
-                self.define(name.clone());
-                self.begin_scope();
-                for parameter in parameters {
-                    // mark as defined because they will be when the function runs.
-                    self.define(parameter.clone());
-                }
-                for statement in body {
-                    self.resolve_statement(statement)?;
-                }
-                self.end_scope();
+                self.resolve_function_declaration(
+                    name,
+                    parameters,
+                    body,
+                    line,
+                    FunctionType::Function,
+                )?;
             }
             Statement::Block { statements } => {
                 self.begin_scope();
@@ -173,15 +164,71 @@ impl VariableResolver {
                 }
                 self.define(name.clone());
                 for statement in methods {
-                    self.resolve_statement(statement)?;
+                    match statement {
+                        Statement::FunctionDeclaration { name, parameters, body, line } => {
+                            self.resolve_function_declaration(name, parameters, body, line, FunctionType::Method)?;
+                        }
+                        _ => unreachable!("internal error: resolver expects methods to be FunctionDeclaration nodes"),
+                    }
                 }
             }
         }
         Ok(())
     }
 
+    fn resolve_function_declaration(
+        &mut self,
+        name: &String,
+        parameters: &Vec<String>,
+        body: &mut Vec<Statement>,
+        line: &usize,
+        function_type: FunctionType,
+    ) -> Result<(), VariableResolverError> {
+        match function_type {
+            // only functions are defined as variables
+            FunctionType::Function => {
+                if let Err(_) = self.declare(name.clone()) {
+                    return Err(VariableResolverError::LocalVariableRedeclaredInScope {
+                        name: name.clone(),
+                        line: *line,
+                    });
+                }
+
+                self.define(name.clone())
+            }
+            FunctionType::Method => {
+                self.begin_scope();
+                self.define("this".to_string());
+            }
+        }
+        if function_type == FunctionType::Method {
+        } else {
+            self.define(name.clone());
+        }
+
+        self.begin_scope();
+
+        for parameter in parameters {
+            // mark as defined because they will be when the function runs.
+            self.define(parameter.clone());
+        }
+        for statement in body {
+            self.resolve_statement(statement)?;
+        }
+        self.end_scope();
+
+        if function_type == FunctionType::Method {
+            self.end_scope();
+        }
+
+        Ok(())
+    }
+
     fn resolve_expr(&self, expr: &mut Expr) -> Result<(), VariableResolverError> {
         match expr {
+            Expr::This(variable) => {
+                self.resolve_expr(variable)?;
+            }
             Expr::Literal(_) => {
                 return Ok(());
             }

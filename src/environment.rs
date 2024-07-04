@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+#[derive(Debug, PartialEq)]
 pub struct Environment<T: Clone> {
     // rust book: "interior mutability pattern"
     pub(crate) parent: Option<Rc<Environment<T>>>,

@@ -1,0 +1,12 @@
+{
+var method = "ok";
+class Foo {
+  method() {
+    print method; // expect: ok
+  }
+}
+
+print "Expecting 'ok' 'ok'";
+print method;
+Foo().method();
+}
