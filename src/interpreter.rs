@@ -68,7 +68,7 @@ impl Display for LoxValue {
             LNumber(n) => write!(f, "{}", n),
             LBool(b) => write!(f, "{}", b),
             LNil => write!(f, "nil"),
-            LClass(class) => write!(f, "class {}", class.name),
+            LClass(class) => write!(f, "{}", class.name),
             LInstance(instance) => write!(f, "{} instance", instance.class.name),
         }
     }

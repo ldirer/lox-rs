@@ -68,7 +68,7 @@ pub enum ParserError {
         line: usize,
         lexeme: String,
     },
-    #[error("[line {line}] Error at '{lexeme}': Expect ')' after {function_type} parameters.")]
+    #[error("[line {line}] Error at '{lexeme}': Expect ')' after parameters.")]
     MissingClosingParenthesisFunction {
         function_type: FunctionType,
         line: usize,
