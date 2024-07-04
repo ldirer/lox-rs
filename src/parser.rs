@@ -94,6 +94,8 @@ pub enum ParserError {
     },
     #[error("[line {line}] Error at '{lexeme}': Expect property name after '.'.")]
     ExpectPropertyAccessName { line: usize, lexeme: String },
+    #[error("[line {line}] Error at '{lexeme}': Expect superclass name.")]
+    ExpectSuperclassName { line: usize, lexeme: String },
 }
 
 pub struct Parser<T: Iterator<Item = Token>> {
@@ -143,6 +145,20 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             TokenType::Identifier,
             ParserError::ClassIdentifierExpected { line, lexeme },
         )?;
+        let mut superclass = None;
+
+        if self.match_current(&vec![TokenType::Less]).is_some() {
+            let TokenInfo { line, lexeme } = self.get_current_token_info();
+            let superclass_token = self.consume(
+                TokenType::Identifier,
+                ParserError::ExpectSuperclassName { line, lexeme },
+            )?;
+            superclass = Some(Expr::Variable {
+                name: superclass_token.lexeme,
+                line: superclass_token.line,
+                depth: None,
+            });
+        }
 
         let TokenInfo { line, lexeme } = self.get_current_token_info();
         self.consume(
@@ -163,6 +179,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
         Ok(Statement::ClassDeclaration {
             name: name_token.lexeme,
+            superclass: superclass.map(Box::new),
             line: name_token.line,
             methods,
         })
@@ -407,14 +424,14 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         )?;
         let then_branch = self.parse_statement()?;
 
-        let mut else_branch_box = None;
+        let mut else_branch = None;
         if self.match_current(&vec![TokenType::Else]).is_some() {
-            else_branch_box = Some(Box::new(self.parse_statement()?));
+            else_branch = Some(self.parse_statement()?);
         }
         Ok(Statement::IfStatement {
             condition,
             then_branch: Box::new(then_branch),
-            else_branch: else_branch_box,
+            else_branch: else_branch.map(Box::new),
         })
     }
     fn parse_while_statement(&mut self) -> Result<Statement, ParserError> {
@@ -1169,6 +1186,30 @@ mod tests {
             parsed[0],
             Statement::ClassDeclaration {
                 name: "Math".to_string(),
+                superclass: None,
+                methods: vec![Statement::FunctionDeclaration {
+                    name: "method".to_string(),
+                    parameters: vec![],
+                    body: vec![],
+                    line: 1,
+                }],
+                line: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn test_class_declaration_with_superclass() {
+        let parsed = parse_program("class Math < A {method(){}}").unwrap();
+        assert_eq!(
+            parsed[0],
+            Statement::ClassDeclaration {
+                name: "Math".to_string(),
+                superclass: Some(Box::new(Expr::Variable {
+                    name: "A".to_string(),
+                    line: 1,
+                    depth: None
+                })),
                 methods: vec![Statement::FunctionDeclaration {
                     name: "method".to_string(),
                     parameters: vec![],

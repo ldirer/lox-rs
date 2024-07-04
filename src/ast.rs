@@ -18,6 +18,8 @@ pub enum Statement {
     },
     ClassDeclaration {
         name: String,
+        // superclass is None or Some(Variable)
+        superclass: Option<Box<Expr>>,
         // methods should contain only FunctionDeclaration objects
         methods: Vec<Statement>,
         line: usize,

@@ -298,6 +298,7 @@ impl<W: Write> Interpreter<W> {
                 name,
                 methods,
                 line,
+                superclass: _superclass,
             } => {
                 // defining first so the name exists and methods can refer to it.
                 environment.define(name.clone(), LoxValue::LNil);

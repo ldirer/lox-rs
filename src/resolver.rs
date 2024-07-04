@@ -194,6 +194,7 @@ impl VariableResolver {
                 name,
                 methods,
                 line,
+                superclass: _superclass,
             } => {
                 let previous_current_class = self.current_class;
                 self.current_class = ClassNestingStatus::InClass;
