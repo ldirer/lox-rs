@@ -55,7 +55,7 @@ impl VariableResolver {
 
     fn declare(&mut self, name: String) -> Result<(), String> {
         let is_global = self.scope_stack.len() == 1;
-        let mut scope = self.scope_stack.last_mut().unwrap();
+        let scope = self.scope_stack.last_mut().unwrap();
         // it's ok to re-declare a global variable.
         if scope.get(&name).unwrap_or(&VariableStatus::Unknown) != &VariableStatus::Unknown
             && !is_global

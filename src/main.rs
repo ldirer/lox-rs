@@ -83,7 +83,7 @@ fn run(source: String) {
     // passing a 'handle error' callback to stick to the book.
     let tokens = tokenize(source, scanner_error);
     // println!("{:#?}", tokens);
-    let mut parsed = parse(tokens.into_iter());
+    let parsed = parse(tokens.into_iter());
     // println!("{:#?}", parsed);
     let stdout_binding = std::io::stdout();
     let mut interpreter = Interpreter::new(stdout_binding);

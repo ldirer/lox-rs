@@ -218,6 +218,7 @@ impl Display for FunctionType {
     }
 }
 
+#[allow(dead_code)]
 pub fn format_lisp_like(expr: &Expr) -> String {
     match expr {
         Expr::Literal(ref literal) => {
@@ -267,6 +268,7 @@ pub fn format_lisp_like(expr: &Expr) -> String {
     }
 }
 
+#[allow(dead_code)]
 pub fn format_reverse_polish_notation(expr: &Expr) -> String {
     match expr {
         Expr::Literal(ref lit) => {

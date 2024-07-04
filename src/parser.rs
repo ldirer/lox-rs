@@ -13,9 +13,6 @@ use crate::token::{Token, TokenType};
 pub enum ParserError {
     #[error("[line {line}] Error at '{lexeme}': Expect ')' after expression.")]
     UnmatchedParenthesis { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Unexpected token {lexeme}.")]
-    UnexpectedToken { line: usize, lexeme: String },
-    // line is not implemented yet for missing tokens
     #[error("[line {line}] Error at '{lexeme}': Expect ';' after value.")]
     MissingSemicolonPrint { line: usize, lexeme: String },
     #[error("[line {line}] Error at '{lexeme}': Expect ';' after expression.")]
@@ -776,6 +773,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     /// 'synchronize' in the book. Not used yet.
     /// The idea is that when there's an error, we don't want to show many 'cascading errors'.
     /// So we use 'anchor points' in tokens where it's likely we are back to a clean state.
+    #[allow(dead_code)]
     fn recover(&mut self) {
         while let Some(token) = self.advance() {
             // I think there's something nice about having an explicit match statement here: if we

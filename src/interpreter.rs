@@ -117,7 +117,6 @@ impl PartialEq for LoxFunction {
 #[derive(Clone)]
 struct LoxClass {
     name: String,
-    environment: Rc<LoxEnvironment>,
     methods: HashMap<String, Rc<LoxFunction>>,
 }
 
@@ -297,7 +296,7 @@ impl<W: Write> Interpreter<W> {
                 let mut lox_methods = HashMap::new();
                 for statement in methods {
                     match statement {
-                        Statement::FunctionDeclaration { name, parameters, body, line } => {
+                        Statement::FunctionDeclaration { name, parameters, body, line: _ } => {
                             let method = LoxFunction{name: name.clone(), parameters: parameters.clone(), body: body.clone(), environment: environment.clone() };
                             lox_methods.insert(name.clone(), Rc::new(method));
                         }
@@ -307,7 +306,6 @@ impl<W: Write> Interpreter<W> {
 
                 let class = LoxValue::LClass(Rc::from(LoxClass {
                     name: name.clone(),
-                    environment: environment.clone(),
                     methods: lox_methods,
                 }));
                 environment
@@ -431,9 +429,7 @@ impl<W: Write> Interpreter<W> {
                 let lox_object = self.interpret_expression(object, environment.clone())?;
                 let lox_value = self.interpret_expression(value, environment.clone())?;
                 match lox_object {
-                    LInstance(mut lox_instance) => {
-                        // TODO at some point add a test where we have an instance and put it as field on another instance.
-                        // then change the field instance. Does it change the other one? It should (I think).
+                    LInstance(lox_instance) => {
                         lox_instance.set_field(name.clone(), lox_value.clone());
                         Ok(lox_value)
                     }
@@ -527,8 +523,8 @@ impl<W: Write> Interpreter<W> {
     fn interpret_class_call(
         &mut self,
         lox_class: Rc<LoxClass>,
-        arguments: Vec<LoxValue>,
-        line: usize,
+        _arguments: Vec<LoxValue>,
+        _line: usize,
     ) -> Result<LoxValue, InterpreterError> {
         Ok(LoxValue::LInstance(Rc::new(LoxInstance::new(
             lox_class.clone(),
