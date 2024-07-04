@@ -23,6 +23,12 @@ impl<T: Clone> Environment<T> {
             bindings: RefCell::new(bindings.unwrap_or(HashMap::new())),
         }
     }
+
+    pub fn new_with_parent(parent: Rc<Environment<T>>) -> Environment<T> {
+        let mut child_env = Environment::new(None);
+        child_env.parent = Some(parent.clone());
+        child_env
+    }
     pub fn define(&self, name: String, value: T) {
         let is_global_environment = self.parent.is_none();
         // it's fine to redefine a global variable, but not a local one (Lox spec).

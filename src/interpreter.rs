@@ -100,8 +100,7 @@ struct LoxFunction {
 impl LoxFunction {
     fn bind(&self, instance: Rc<LoxInstance>) -> Rc<LoxFunction> {
         // Add "this" to the environment so the function returned is a "bound method"
-        let mut closure_env = LoxEnvironment::new(None);
-        closure_env.parent = Some(self.environment.clone());
+        let closure_env = LoxEnvironment::new_with_parent(self.environment.clone());
         closure_env.define("this".to_string(), LInstance(instance.clone()));
         return Rc::new(LoxFunction {
             environment: Rc::new(closure_env),
@@ -254,9 +253,8 @@ impl<W: Write> Interpreter<W> {
                 Ok(None)
             }
             Statement::Block { statements } => {
-                let mut child_env = LoxEnvironment::new(None);
-                child_env.parent = Some(environment.clone());
-                let child_env = Rc::new(child_env);
+                let child_env = Rc::new(LoxEnvironment::new_with_parent(environment));
+
                 for statement in statements {
                     let return_value = self.interpret_statement(statement, child_env.clone())?;
                     if !return_value.is_none() {
@@ -329,9 +327,7 @@ impl<W: Write> Interpreter<W> {
                         Statement::FunctionDeclaration { name, parameters, body, line: _ } => {
                             let mut method_env = environment.clone();
                             if let Some(superclass) = &lox_superclass {
-                                let mut closure_env = LoxEnvironment::new(None);
-                                closure_env.parent = Some(method_env.clone());
-                                method_env = Rc::new(closure_env);
+                                method_env = Rc::new(LoxEnvironment::new_with_parent(method_env));
                                 method_env.define("super".to_string(), LoxValue::LClass(superclass.clone()));
                             }
                             let method = LoxFunction{name: name.clone(), parameters: parameters.clone(), body: body.clone(), environment: method_env, is_initializer: name == CONSTRUCTOR_RESERVED_NAME };
@@ -584,14 +580,12 @@ impl<W: Write> Interpreter<W> {
         }
 
         // copy-pasta, this could be factored out. I wonder if I should be reusing the block interpretation too
-        let mut child_env = LoxEnvironment::new(Some(
-            zip(&lox_func.parameters, arguments)
-                .into_iter()
-                .map(|(name, value)| (name.clone(), value))
-                .collect(),
+        let child_env = Rc::new(LoxEnvironment::new_with_parent(
+            lox_func.environment.clone(),
         ));
-        child_env.parent = Some(lox_func.environment.clone());
-        let child_env = Rc::new(child_env);
+        for (name, value) in zip(&lox_func.parameters, arguments) {
+            child_env.define(name.clone(), value);
+        }
 
         for statement in &lox_func.body {
             let return_value = self.interpret_statement(statement, child_env.clone())?;
