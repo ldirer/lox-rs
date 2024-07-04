@@ -1,3 +1,4 @@
+// check that we don't make copies of objects on assignment
 class A {}
 
 var a = A();

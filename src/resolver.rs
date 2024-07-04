@@ -53,14 +53,17 @@ impl VariableResolver {
         self.scope_stack.pop();
     }
 
-    fn declare(&mut self, name: String) -> Result<(), String> {
+    fn declare(&mut self, name: String, line: usize) -> Result<(), VariableResolverError> {
         let is_global = self.scope_stack.len() == 1;
         let scope = self.scope_stack.last_mut().unwrap();
         // it's ok to re-declare a global variable.
         if scope.get(&name).unwrap_or(&VariableStatus::Unknown) != &VariableStatus::Unknown
             && !is_global
         {
-            return Err("variable redeclared!".to_string());
+            return Err(VariableResolverError::LocalVariableRedeclaredInScope {
+                name: name.clone(),
+                line,
+            });
         }
         scope.insert(name, VariableStatus::Declared);
         Ok(())
@@ -129,12 +132,7 @@ impl VariableResolver {
                 initializer,
                 line,
             } => {
-                if let Err(_) = self.declare(name.clone()) {
-                    return Err(VariableResolverError::LocalVariableRedeclaredInScope {
-                        name: name.clone(),
-                        line: *line,
-                    });
-                }
+                self.declare(name.clone(), *line)?;
                 self.resolve_expr(initializer)?;
                 self.define(name.clone());
             }
@@ -176,12 +174,7 @@ impl VariableResolver {
             } => {
                 let previous_current_class = self.current_class;
                 self.current_class = ClassNestingStatus::InClass;
-                if let Err(_) = self.declare(name.clone()) {
-                    return Err(VariableResolverError::LocalVariableRedeclaredInScope {
-                        name: name.clone(),
-                        line: *line,
-                    });
-                }
+                self.declare(name.clone(), *line)?;
                 self.define(name.clone());
                 for statement in methods {
                     match statement {
@@ -211,14 +204,8 @@ impl VariableResolver {
         match function_type {
             // only functions are defined as variables
             FunctionType::Function => {
-                if let Err(_) = self.declare(name.clone()) {
-                    return Err(VariableResolverError::LocalVariableRedeclaredInScope {
-                        name: name.clone(),
-                        line: *line,
-                    });
-                }
-
-                self.define(name.clone())
+                self.declare(name.clone(), *line)?;
+                self.define(name.clone());
             }
             FunctionType::Method => {
                 self.begin_scope();
@@ -234,6 +221,7 @@ impl VariableResolver {
 
         for parameter in parameters {
             // mark as defined because they will be when the function runs.
+            self.declare(parameter.clone(), *line)?;
             self.define(parameter.clone());
         }
         for statement in body {

@@ -1,0 +1,6 @@
+// currently broken in my implementation due to how (poorly) lines are managed
+// the resolver does return an error, the line number is just not correct.
+fun foo(arg,
+        arg) { // Error at 'arg': Already a variable with this name in this scope.
+  "body";
+}
