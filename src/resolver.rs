@@ -26,11 +26,15 @@ pub enum VariableResolverError {
     ReturnFromInitializer { line: usize },
     #[error("[line {line}] Error at '{name}': A class can't inherit from itself.")]
     ClassCannotInheritFromItself { name: String, line: usize },
+    #[error("[line {line}] Error at 'super': Can't use 'super' outside of a class.")]
+    SuperOutsideOfClass { line: usize },
+    #[error("[line {line}] Error at 'super': Can't use 'super' in a class with no superclass.")]
+    SuperInClassWithoutSuperclass { line: usize },
 }
 #[derive(Debug, Copy, Clone, PartialEq)]
 enum ClassNestingStatus {
     None,
-    InClass,
+    InClass { subclass: bool },
 }
 #[derive(Debug, Copy, Clone, PartialEq)]
 enum FunctionNestingStatus {
@@ -199,18 +203,20 @@ impl VariableResolver {
                 superclass,
             } => {
                 let previous_current_class = self.current_class;
-                self.current_class = ClassNestingStatus::InClass;
+                self.current_class = ClassNestingStatus::InClass {
+                    subclass: superclass.is_some(),
+                };
                 self.declare(name.clone(), *line)?;
                 self.define(name.clone());
 
                 if let Some(superclass_var) = superclass {
                     if let Expr::Variable {
-                        name: super_name,
+                        name: superclass_name,
                         line,
                         ..
                     } = superclass_var.as_ref()
                     {
-                        if super_name == name {
+                        if superclass_name == name {
                             return Err(VariableResolverError::ClassCannotInheritFromItself {
                                 name: name.clone(),
                                 line: *line,
@@ -218,6 +224,8 @@ impl VariableResolver {
                         }
                     }
                     self.resolve_expr(superclass_var)?;
+                    self.begin_scope();
+                    self.define("super".to_string())
                 }
 
                 for statement in methods {
@@ -227,6 +235,10 @@ impl VariableResolver {
                         }
                         _ => unreachable!("internal error: resolver expects methods to be FunctionDeclaration nodes"),
                     }
+                }
+
+                if superclass.is_some() {
+                    self.end_scope();
                 }
 
                 self.current_class = previous_current_class;
@@ -353,6 +365,17 @@ impl VariableResolver {
                 self.resolve_expr(object)?;
                 self.resolve_expr(value)?;
             }
+            Expr::Super { line, variable, .. } => match self.current_class {
+                ClassNestingStatus::None => {
+                    return Err(VariableResolverError::SuperOutsideOfClass { line: *line });
+                }
+                ClassNestingStatus::InClass { subclass: false } => {
+                    return Err(VariableResolverError::SuperInClassWithoutSuperclass {
+                        line: *line,
+                    });
+                }
+                ClassNestingStatus::InClass { subclass: true } => self.resolve_expr(variable)?,
+            },
         };
         Ok(())
     }

@@ -96,6 +96,10 @@ pub enum ParserError {
     ExpectPropertyAccessName { line: usize, lexeme: String },
     #[error("[line {line}] Error at '{lexeme}': Expect superclass name.")]
     ExpectSuperclassName { line: usize, lexeme: String },
+    #[error("[line {line}] Error at '{lexeme}': Expect '.' after 'super'.")]
+    ExpectDotAfterSuper { line: usize, lexeme: String },
+    #[error("[line {line}] Error at '{lexeme}': Expect superclass method name.")]
+    ExpectMethodAfterSuper { line: usize, lexeme: String },
 }
 
 pub struct Parser<T: Iterator<Item = Token>> {
@@ -739,6 +743,27 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                     }
                     Some(_) => Ok(Expr::Grouping(Box::new(expr))),
                 }
+            }
+            TokenType::Super => {
+                let TokenInfo { line, lexeme } = self.get_current_token_info();
+                self.consume(
+                    TokenType::Dot,
+                    ParserError::ExpectDotAfterSuper { line, lexeme },
+                )?;
+                let TokenInfo { line, lexeme } = self.get_current_token_info();
+                let method_token = self.consume(
+                    TokenType::Identifier,
+                    ParserError::ExpectMethodAfterSuper { line, lexeme },
+                )?;
+                Ok(Expr::Super {
+                    variable: Box::new(Expr::Variable {
+                        depth: None,
+                        line,
+                        name: "super".to_string(),
+                    }),
+                    line,
+                    method: method_token.lexeme,
+                })
             }
             _ => Err(ParserError::ExpectExpression {
                 line: token.line,

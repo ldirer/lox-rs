@@ -17,7 +17,7 @@ use crate::ast::{
 use crate::environment::{Environment, EnvironmentError};
 use crate::interpreter::InterpreterError::UndefinedVariable;
 use crate::interpreter::LoxValue::*;
-
+const CONSTRUCTOR_RESERVED_NAME: &str = "init";
 type LoxEnvironment = Environment<LoxValue>;
 #[derive(Debug, PartialEq, Error)]
 pub enum InterpreterError {
@@ -141,12 +141,12 @@ struct LoxClass {
 }
 
 impl LoxClass {
-    fn find_method(&self, name: &String) -> Option<&Rc<LoxFunction>> {
-        self.methods.get(name).or_else(|| {
+    fn find_method(&self, name: &String) -> Option<Rc<LoxFunction>> {
+        return self.methods.get(name).map(|m| m.clone()).or_else(|| {
             self.superclass
-                .as_ref()
+                .clone()
                 .and_then(|cls| cls.find_method(name))
-        })
+        });
     }
 }
 
@@ -318,15 +318,23 @@ impl<W: Write> Interpreter<W> {
 
                 let mut lox_superclass = None;
                 if let Some(super_var) = superclass {
-                    lox_superclass =
-                        Some(self.interpret_superclass(super_var, environment.clone())?);
+                    lox_superclass = Some(
+                        self.interpret_superclass_declaration(super_var, environment.clone())?,
+                    );
                 }
 
                 let mut lox_methods = HashMap::new();
                 for statement in methods {
                     match statement {
                         Statement::FunctionDeclaration { name, parameters, body, line: _ } => {
-                            let method = LoxFunction{name: name.clone(), parameters: parameters.clone(), body: body.clone(), environment: environment.clone(), is_initializer: name == "init" };
+                            let mut method_env = environment.clone();
+                            if let Some(superclass) = &lox_superclass {
+                                let mut closure_env = LoxEnvironment::new(None);
+                                closure_env.parent = Some(method_env.clone());
+                                method_env = Rc::new(closure_env);
+                                method_env.define("super".to_string(), LoxValue::LClass(superclass.clone()));
+                            }
+                            let method = LoxFunction{name: name.clone(), parameters: parameters.clone(), body: body.clone(), environment: method_env, is_initializer: name == CONSTRUCTOR_RESERVED_NAME };
                             lox_methods.insert(name.clone(), Rc::new(method));
                         }
                         _ => panic!("internal error: interpreter expects only function declarations in a class declaration node")
@@ -473,6 +481,47 @@ impl<W: Write> Interpreter<W> {
                     }),
                 }
             }
+            Expr::Super {
+                line,
+                method,
+                variable,
+            } => {
+                // get the method on the superclass and bind this to the current 'this' (based on environment)
+                let this_depth: usize;
+                if let Expr::Variable { depth, .. } = variable.as_ref() {
+                    // hack. Following the book though.
+                    this_depth = depth.unwrap() - 1;
+                } else {
+                    unreachable!("interpreter expects super to store a Variable node");
+                }
+                let lox_superclass = self.interpret_expression(variable, environment.clone())?;
+                match lox_superclass {
+                    LClass(class) => {
+                        let lox_method = class.find_method(method);
+                        match lox_method {
+                            None => {
+                                return Err(InterpreterError::UndefinedProperty {
+                                    name: method.clone(),
+                                    line: *line,
+                                });
+                            }
+                            Some(lox_function) => {
+                                match environment.lookup("this".to_string(), this_depth).unwrap() {
+                                    LInstance(lox_instance_this) => Ok(LoxValue::LFunc(
+                                        lox_function.clone().bind(lox_instance_this),
+                                    )),
+                                    _ => unreachable!(
+                                        "implementation error, 'this' should refer to an instance"
+                                    ),
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        unreachable!("internal error, expected super to evaluate to a class object")
+                    }
+                }
+            }
         }
     }
 
@@ -569,7 +618,7 @@ impl<W: Write> Interpreter<W> {
         line: usize,
     ) -> Result<LoxValue, InterpreterError> {
         let instance = Rc::new(LoxInstance::new(lox_class.clone()));
-        if let Some(constructor) = lox_class.methods.get("init") {
+        if let Some(constructor) = lox_class.find_method(&CONSTRUCTOR_RESERVED_NAME.to_string()) {
             let bound_method = constructor.bind(instance.clone());
             self.interpret_function_call(&bound_method, arguments, line)?;
         } else if arguments.len() > 0 {
@@ -606,7 +655,7 @@ impl<W: Write> Interpreter<W> {
         }
     }
 
-    fn interpret_superclass(
+    fn interpret_superclass_declaration(
         &mut self,
         superclass_var: &Expr,
         environment: Rc<LoxEnvironment>,

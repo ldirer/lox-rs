@@ -52,7 +52,6 @@ impl<T: Clone> Environment<T> {
     }
 
     pub fn lookup(&self, name: String, depth: usize) -> Result<T, EnvironmentError> {
-        // todo error handling
         if depth == 0 {
             if let Some(value) = self.bindings.borrow().get(&name) {
                 return Ok(value.clone());
@@ -62,11 +61,19 @@ impl<T: Clone> Environment<T> {
 
         match &self.parent {
             None => {
-                eprintln!("Here's what we got: {:#?}", self.bindings.borrow().keys());
+                self.debug(depth);
                 unreachable!("lookup failed for {name}! Implementation bug, we should have a parent or depth should be zero (not {depth})")
             }
             Some(parent_env) => parent_env.lookup(name, depth - 1),
         }
+    }
+
+    #[allow(dead_code)]
+    fn debug(&self, depth: usize) {
+        eprintln!(
+            "What's in scope - depth {depth}: {:#?}",
+            self.bindings.borrow().keys()
+        );
     }
 }
 

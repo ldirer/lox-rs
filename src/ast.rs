@@ -93,6 +93,11 @@ pub enum Expr {
         name: String,
         line: usize,
     },
+    Super {
+        variable: Box<Expr>,
+        line: usize,
+        method: String,
+    },
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
