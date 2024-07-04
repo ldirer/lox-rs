@@ -94,6 +94,21 @@ struct LoxFunction {
     environment: Rc<LoxEnvironment>,
 }
 
+impl LoxFunction {
+    fn bind(&self, instance: Rc<LoxInstance>) -> Rc<LoxFunction> {
+        // Add "this" to the environment so the function returned is a "bound method"
+        let mut closure_env = LoxEnvironment::new(None);
+        closure_env.parent = Some(self.environment.clone());
+        closure_env.define("this".to_string(), LInstance(instance.clone()));
+        return Rc::new(LoxFunction {
+            environment: Rc::new(closure_env),
+            name: self.name.clone(),
+            parameters: self.parameters.clone(),
+            body: self.body.clone(),
+        });
+    }
+}
+
 impl Debug for LoxFunction {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LoxFunction")
@@ -161,18 +176,8 @@ impl LoxInstance {
         }
 
         if let Some(value) = self.class.methods.get(name) {
-            // Add "this" to the environment so the function returned is a "bound method"
-            let mut closure_env = LoxEnvironment::new(None);
-            closure_env.parent = Some(value.environment.clone());
-            closure_env.define("this".to_string(), LInstance(self_rc.clone()));
-            return Ok(LFunc(Rc::new(LoxFunction {
-                environment: Rc::new(closure_env),
-                name: value.name.clone(),
-                parameters: value.parameters.clone(),
-                body: value.body.clone(),
-            })));
+            return Ok(LFunc(value.bind(self_rc.clone())));
         }
-
         return Err(InterpreterError::UndefinedProperty {
             name: name.clone(),
             line,
@@ -523,12 +528,22 @@ impl<W: Write> Interpreter<W> {
     fn interpret_class_call(
         &mut self,
         lox_class: Rc<LoxClass>,
-        _arguments: Vec<LoxValue>,
-        _line: usize,
+        arguments: Vec<LoxValue>,
+        line: usize,
     ) -> Result<LoxValue, InterpreterError> {
-        Ok(LoxValue::LInstance(Rc::new(LoxInstance::new(
-            lox_class.clone(),
-        ))))
+        let instance = Rc::new(LoxInstance::new(lox_class.clone()));
+        if let Some(constructor) = lox_class.methods.get("init") {
+            let bound_method = constructor.bind(instance.clone());
+            self.interpret_function_call(&bound_method, arguments, line)?;
+        } else if arguments.len() > 0 {
+            return Err(InterpreterError::WrongNumberOfArguments {
+                arguments: arguments.len(),
+                parameters: 0,
+                line,
+            });
+        };
+
+        Ok(LoxValue::LInstance(instance))
     }
 
     fn interpret_unary(

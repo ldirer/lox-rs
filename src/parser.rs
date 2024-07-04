@@ -86,8 +86,8 @@ pub enum ParserError {
 
     #[error("[line {line}] Error at '{lexeme}': Expect expression.")]
     ExpectExpression { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Too many arguments.")]
-    FunctionTooManyArguments {
+    #[error("[line {line}] Error at '{lexeme}': Can't have more than 255 parameters.")]
+    FunctionTooManyParameters {
         function_type: FunctionType,
         line: usize,
         lexeme: String,
@@ -213,7 +213,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                         if parameters.len() >= 255 {
                             // we should not stop parsing here. We want to report the error but the parsing is in a clean state.
                             // looks like this is a bit tricky, leaving it aside for now.
-                            return Err(ParserError::FunctionTooManyArguments {
+                            return Err(ParserError::FunctionTooManyParameters {
                                 function_type,
                                 line: t.line,
                                 lexeme: t.lexeme.clone(),
