@@ -14,7 +14,8 @@ use crate::ast::{
     BinaryLogicalOperator, BinaryLogicalOperatorType, BinaryOperator, BinaryOperatorType, Expr,
     Literal, Statement, UnaryOperator, UnaryOperatorType,
 };
-use crate::environment::Environment;
+use crate::environment::{Environment, EnvironmentError};
+use crate::interpreter::InterpreterError::UndefinedVariable;
 use crate::interpreter::LoxValue::*;
 
 type LoxEnvironment = Environment<LoxValue>;
@@ -47,6 +48,17 @@ pub enum InterpreterError {
     OnlyInstancesHaveProperties { line: usize, name: String },
     #[error("[line {line}] runtime error: Only instances have fields.")]
     SetPropertyOnlyWorksOnInstances { line: usize, lexeme: String },
+
+    #[error("[line {line}] runtime error: Undefined variable '{name}'.")]
+    UndefinedVariable { line: usize, name: String },
+}
+
+impl InterpreterError {
+    fn from_environment_error(value: EnvironmentError, line: usize) -> Self {
+        match value {
+            EnvironmentError::VariableNotFound { name } => UndefinedVariable { name, line },
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -298,7 +310,9 @@ impl<W: Write> Interpreter<W> {
                     environment: environment.clone(),
                     methods: lox_methods,
                 }));
-                environment.assign(name.clone(), class, 0);
+                environment
+                    .assign(name.clone(), class, 0)
+                    .map_err(|err| InterpreterError::from_environment_error(err, *line))?;
 
                 Ok(None)
             }
@@ -335,18 +349,16 @@ impl<W: Write> Interpreter<W> {
             Expr::Grouping(grouped_expr) => {
                 self.interpret_expression(grouped_expr, environment.clone())
             }
-            Expr::Variable {
-                name,
-                depth,
-                line: _line,
-            } => Ok(environment.lookup(name.clone(), depth.unwrap())),
+            Expr::Variable { name, depth, line } => Ok(environment
+                .lookup(name.clone(), depth.unwrap())
+                .map_err(|err| InterpreterError::from_environment_error(err, *line))?),
             Expr::This(variable) => self.interpret_expression(variable, environment.clone()),
             Expr::Assign { location, value } => {
                 let right_hand_side = self.interpret_expression(&value, environment.clone())?;
                 match location.as_ref() {
-                    Expr::Variable { depth, line, name } => {
-                        environment.assign(name.clone(), right_hand_side.clone(), depth.unwrap())
-                    }
+                    Expr::Variable { depth, line, name } => environment
+                        .assign(name.clone(), right_hand_side.clone(), depth.unwrap())
+                        .map_err(|err| InterpreterError::from_environment_error(err, *line))?,
                     _ => panic!("assignment to location of this type not handled ({location:?})"),
                 }
                 Ok(right_hand_side)
