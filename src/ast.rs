@@ -29,6 +29,7 @@ pub enum Statement {
         line: usize,
     },
     ReturnStatement {
+        line: usize,
         expression: Expr,
     },
     Block {

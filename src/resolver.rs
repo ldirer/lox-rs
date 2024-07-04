@@ -11,11 +11,6 @@ enum VariableStatus {
     Defined,
 }
 
-/// an example of a 'semantic analysis' pass
-pub struct VariableResolver {
-    scope_stack: Vec<HashMap<String, VariableStatus>>,
-}
-
 #[derive(Debug, Error, PartialEq)]
 pub enum VariableResolverError {
     // var a = a + 1: not allowed. Almost certainly a user mistake.
@@ -23,6 +18,22 @@ pub enum VariableResolverError {
     LocalVariableSelfReferencedInInitializer { line: usize, name: String },
     #[error("[line {line}] Error at '{name}': Already a variable with this name in this scope.")]
     LocalVariableRedeclaredInScope { line: usize, name: String },
+    #[error("[line {line}] Error at 'return': Can't return from top-level code.")]
+    ReturnNotAllowed { line: usize },
+    #[error("[line {line}] Error at 'this': Can't use 'this' outside of a class.")]
+    ThisNotAllowed { line: usize },
+}
+#[derive(Debug, Copy, Clone, PartialEq)]
+enum ClassNestingStatus {
+    None,
+    InClass,
+}
+
+/// an example of a 'semantic analysis' pass
+pub struct VariableResolver {
+    scope_stack: Vec<HashMap<String, VariableStatus>>,
+    in_function: bool,
+    current_class: ClassNestingStatus,
 }
 
 impl VariableResolver {
@@ -30,6 +41,8 @@ impl VariableResolver {
         VariableResolver {
             // start with one item for globals
             scope_stack: vec![HashMap::new()],
+            in_function: false,
+            current_class: ClassNestingStatus::None,
         }
     }
 
@@ -146,9 +159,14 @@ impl VariableResolver {
                 }
                 self.end_scope();
             }
-            Statement::ExprStatement { expression }
-            | Statement::PrintStatement { expression }
-            | Statement::ReturnStatement { expression } => {
+            Statement::ExprStatement { expression } | Statement::PrintStatement { expression } => {
+                self.resolve_expr(expression)?;
+            }
+
+            Statement::ReturnStatement { expression, line } => {
+                if !self.in_function {
+                    return Err(VariableResolverError::ReturnNotAllowed { line: *line });
+                }
                 self.resolve_expr(expression)?;
             }
             Statement::ClassDeclaration {
@@ -156,6 +174,8 @@ impl VariableResolver {
                 methods,
                 line,
             } => {
+                let previous_current_class = self.current_class;
+                self.current_class = ClassNestingStatus::InClass;
                 if let Err(_) = self.declare(name.clone()) {
                     return Err(VariableResolverError::LocalVariableRedeclaredInScope {
                         name: name.clone(),
@@ -171,6 +191,8 @@ impl VariableResolver {
                         _ => unreachable!("internal error: resolver expects methods to be FunctionDeclaration nodes"),
                     }
                 }
+
+                self.current_class = previous_current_class;
             }
         }
         Ok(())
@@ -184,6 +206,8 @@ impl VariableResolver {
         line: &usize,
         function_type: FunctionType,
     ) -> Result<(), VariableResolverError> {
+        let previous_in_function = self.in_function;
+        self.in_function = true;
         match function_type {
             // only functions are defined as variables
             FunctionType::Function => {
@@ -216,6 +240,7 @@ impl VariableResolver {
             self.resolve_statement(statement)?;
         }
         self.end_scope();
+        self.in_function = previous_in_function;
 
         if function_type == FunctionType::Method {
             self.end_scope();
@@ -227,6 +252,16 @@ impl VariableResolver {
     fn resolve_expr(&self, expr: &mut Expr) -> Result<(), VariableResolverError> {
         match expr {
             Expr::This(variable) => {
+                match &**variable {
+                    Expr::Variable { line, .. } => {
+                        if self.current_class == ClassNestingStatus::None {
+                            return Err(VariableResolverError::ThisNotAllowed { line: *line });
+                        }
+                    }
+                    _ => unreachable!(
+                        "this resolver assumes 'This' nodes can only contain Variable nodes."
+                    ),
+                }
                 self.resolve_expr(variable)?;
             }
             Expr::Literal(_) => {

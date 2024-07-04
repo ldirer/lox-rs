@@ -479,7 +479,11 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             TokenType::Semicolon,
             ParserError::MissingSemicolonExpressionStatement { line, lexeme },
         )?;
-        return Ok(ReturnStatement { expression: expr });
+        return Ok(ReturnStatement {
+            expression: expr,
+            // this is not necessarily the correct line number, we should be using the line of the return token.
+            line,
+        });
     }
 
     fn parse_expression_statement(&mut self) -> Result<Statement, ParserError> {
@@ -1069,6 +1073,7 @@ mod tests {
                 name: "fibonacci".to_string(),
                 parameters: vec!["n".to_string(), "debug".to_string()],
                 body: vec![ReturnStatement {
+                    line: 1,
                     expression: Expr::Binary {
                         operator: BinaryOperator {
                             type_: BinaryOperatorType::Plus,

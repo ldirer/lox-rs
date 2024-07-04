@@ -302,7 +302,7 @@ impl<W: Write> Interpreter<W> {
 
                 Ok(None)
             }
-            Statement::ReturnStatement { expression } => {
+            Statement::ReturnStatement { expression, .. } => {
                 let lox_value = self.interpret_expression(expression, environment.clone())?;
                 Ok(Some(lox_value))
             }
