@@ -462,13 +462,13 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     fn parse_return_statement(&mut self) -> Result<Statement, ParserError> {
-        let mut expr = Expr::Literal(Literal::Nil);
+        let mut expr = None;
         if self
             .tokens
             .peek()
             .is_some_and(|t| t.r#type != TokenType::Semicolon)
         {
-            expr = self.parse_expression()?;
+            expr = Some(self.parse_expression()?);
         }
 
         let TokenInfo { line, lexeme } = self.get_current_token_info();
@@ -1072,7 +1072,7 @@ mod tests {
                 parameters: vec!["n".to_string(), "debug".to_string()],
                 body: vec![ReturnStatement {
                     line: 1,
-                    expression: Expr::Binary {
+                    expression: Some(Expr::Binary {
                         operator: BinaryOperator {
                             type_: BinaryOperatorType::Plus,
                             line: 1
@@ -1083,7 +1083,7 @@ mod tests {
                             depth: None,
                         }),
                         right: Box::from(Expr::Literal(Number(1.0)))
-                    }
+                    })
                 }]
             }
         );

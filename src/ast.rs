@@ -30,7 +30,7 @@ pub enum Statement {
     },
     ReturnStatement {
         line: usize,
-        expression: Expr,
+        expression: Option<Expr>,
     },
     Block {
         statements: Vec<Statement>,

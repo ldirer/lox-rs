@@ -22,17 +22,25 @@ pub enum VariableResolverError {
     ReturnNotAllowed { line: usize },
     #[error("[line {line}] Error at 'this': Can't use 'this' outside of a class.")]
     ThisNotAllowed { line: usize },
+    #[error("[line {line}] Error at 'return': Can't return a value from an initializer.")]
+    ReturnFromInitializer { line: usize },
 }
 #[derive(Debug, Copy, Clone, PartialEq)]
 enum ClassNestingStatus {
     None,
     InClass,
 }
+#[derive(Debug, Copy, Clone, PartialEq)]
+enum FunctionNestingStatus {
+    None,
+    InFunction,
+    InMethod { is_initializer: bool },
+}
 
 /// an example of a 'semantic analysis' pass
 pub struct VariableResolver {
     scope_stack: Vec<HashMap<String, VariableStatus>>,
-    in_function: bool,
+    current_function: FunctionNestingStatus,
     current_class: ClassNestingStatus,
 }
 
@@ -41,7 +49,7 @@ impl VariableResolver {
         VariableResolver {
             // start with one item for globals
             scope_stack: vec![HashMap::new()],
-            in_function: false,
+            current_function: FunctionNestingStatus::None,
             current_class: ClassNestingStatus::None,
         }
     }
@@ -162,10 +170,25 @@ impl VariableResolver {
             }
 
             Statement::ReturnStatement { expression, line } => {
-                if !self.in_function {
-                    return Err(VariableResolverError::ReturnNotAllowed { line: *line });
+                match self.current_function {
+                    FunctionNestingStatus::None => {
+                        return Err(VariableResolverError::ReturnNotAllowed { line: *line });
+                    }
+                    FunctionNestingStatus::InMethod {
+                        is_initializer: true,
+                    } => {
+                        // only allow `return` without a value. Will be interpreted as 'return this'.
+                        if expression.is_some() {
+                            return Err(VariableResolverError::ReturnFromInitializer {
+                                line: *line,
+                            });
+                        }
+                    }
+                    _ => {}
                 }
-                self.resolve_expr(expression)?;
+                if let Some(value) = expression {
+                    self.resolve_expr(value)?;
+                }
             }
             Statement::ClassDeclaration {
                 name,
@@ -199,8 +222,13 @@ impl VariableResolver {
         line: &usize,
         function_type: FunctionType,
     ) -> Result<(), VariableResolverError> {
-        let previous_in_function = self.in_function;
-        self.in_function = true;
+        let previous_current_function = self.current_function;
+        self.current_function = match function_type {
+            FunctionType::Function => FunctionNestingStatus::InFunction,
+            FunctionType::Method => FunctionNestingStatus::InMethod {
+                is_initializer: name == "init",
+            },
+        };
         match function_type {
             // only functions are defined as variables
             FunctionType::Function => {
@@ -228,7 +256,7 @@ impl VariableResolver {
             self.resolve_statement(statement)?;
         }
         self.end_scope();
-        self.in_function = previous_in_function;
+        self.current_function = previous_current_function;
 
         if function_type == FunctionType::Method {
             self.end_scope();

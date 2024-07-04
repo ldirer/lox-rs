@@ -92,6 +92,7 @@ struct LoxFunction {
     parameters: Vec<String>,
     body: Vec<Statement>,
     environment: Rc<LoxEnvironment>,
+    is_initializer: bool,
 }
 
 impl LoxFunction {
@@ -105,6 +106,7 @@ impl LoxFunction {
             name: self.name.clone(),
             parameters: self.parameters.clone(),
             body: self.body.clone(),
+            is_initializer: self.is_initializer,
         });
     }
 }
@@ -287,6 +289,7 @@ impl<W: Write> Interpreter<W> {
                         parameters: parameters.clone(),
                         body: body.clone(),
                         environment: environment.clone(),
+                        is_initializer: false,
                     })),
                 );
                 Ok(None)
@@ -302,7 +305,7 @@ impl<W: Write> Interpreter<W> {
                 for statement in methods {
                     match statement {
                         Statement::FunctionDeclaration { name, parameters, body, line: _ } => {
-                            let method = LoxFunction{name: name.clone(), parameters: parameters.clone(), body: body.clone(), environment: environment.clone() };
+                            let method = LoxFunction{name: name.clone(), parameters: parameters.clone(), body: body.clone(), environment: environment.clone(), is_initializer: name == "init" };
                             lox_methods.insert(name.clone(), Rc::new(method));
                         }
                         _ => panic!("internal error: interpreter expects only function declarations in a class declaration node")
@@ -319,10 +322,14 @@ impl<W: Write> Interpreter<W> {
 
                 Ok(None)
             }
-            Statement::ReturnStatement { expression, .. } => {
-                let lox_value = self.interpret_expression(expression, environment.clone())?;
-                Ok(Some(lox_value))
-            }
+            Statement::ReturnStatement { expression, .. } => match expression {
+                // we would not want to return Ok(None) here because we use the return value elsewhere (function call) to know if there was a return.
+                None => Ok(Some(LoxValue::LNil)),
+                Some(value_expr) => {
+                    let lox_value = self.interpret_expression(value_expr, environment.clone())?;
+                    Ok(Some(lox_value))
+                }
+            },
         }
     }
 
@@ -518,10 +525,18 @@ impl<W: Write> Interpreter<W> {
         for statement in &lox_func.body {
             let return_value = self.interpret_statement(statement, child_env.clone())?;
             if let Some(v) = return_value {
+                if lox_func.is_initializer {
+                    // bypass return value. resolver should only allow empty returns anyway
+                    // unwrapping because it's an implementation bug if the variable isn't there.
+                    return Ok(lox_func.environment.lookup("this".to_string(), 0).unwrap());
+                }
                 return Ok(v);
             }
         }
-        // implicit returned value is nil
+        // implicit returned value is nil, unless we're in an initializer
+        if lox_func.is_initializer {
+            return Ok(lox_func.environment.lookup("this".to_string(), 0).unwrap());
+        }
         Ok(LoxValue::LNil)
     }
 
@@ -598,9 +613,7 @@ mod tests {
     use std::rc::Rc;
 
     use crate::interpreter::{Interpreter, InterpreterError, LoxEnvironment, LoxValue};
-    use crate::test_helpers::{
-        parse_and_resolve_program, parse_expr, parse_program, parse_statement,
-    };
+    use crate::test_helpers::{parse_and_resolve_program, parse_expr, parse_statement};
 
     ///assumes success
     fn get_lox_value(code: &str) -> LoxValue {
