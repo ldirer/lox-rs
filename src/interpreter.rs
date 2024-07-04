@@ -51,6 +51,8 @@ pub enum InterpreterError {
 
     #[error("[line {line}] runtime error: Undefined variable '{name}'.")]
     UndefinedVariable { line: usize, name: String },
+    #[error("[line {line}] runtime error: Superclass must be a class.")]
+    SuperclassMustBeAClass { line: usize, name: String },
 }
 
 impl InterpreterError {
@@ -134,7 +136,18 @@ impl PartialEq for LoxFunction {
 #[derive(Clone)]
 struct LoxClass {
     name: String,
+    superclass: Option<Rc<LoxClass>>,
     methods: HashMap<String, Rc<LoxFunction>>,
+}
+
+impl LoxClass {
+    fn find_method(&self, name: &String) -> Option<&Rc<LoxFunction>> {
+        self.methods.get(name).or_else(|| {
+            self.superclass
+                .as_ref()
+                .and_then(|cls| cls.find_method(name))
+        })
+    }
 }
 
 impl Debug for LoxClass {
@@ -177,7 +190,7 @@ impl LoxInstance {
             return Ok(value.clone());
         }
 
-        if let Some(value) = self.class.methods.get(name) {
+        if let Some(value) = self.class.find_method(name) {
             return Ok(LFunc(value.bind(self_rc.clone())));
         }
         return Err(InterpreterError::UndefinedProperty {
@@ -298,10 +311,17 @@ impl<W: Write> Interpreter<W> {
                 name,
                 methods,
                 line,
-                superclass: _superclass,
+                superclass,
             } => {
                 // defining first so the name exists and methods can refer to it.
                 environment.define(name.clone(), LoxValue::LNil);
+
+                let mut lox_superclass = None;
+                if let Some(super_var) = superclass {
+                    lox_superclass =
+                        Some(self.interpret_superclass(super_var, environment.clone())?);
+                }
+
                 let mut lox_methods = HashMap::new();
                 for statement in methods {
                     match statement {
@@ -315,6 +335,7 @@ impl<W: Write> Interpreter<W> {
 
                 let class = LoxValue::LClass(Rc::from(LoxClass {
                     name: name.clone(),
+                    superclass: lox_superclass,
                     methods: lox_methods,
                 }));
                 environment
@@ -582,6 +603,26 @@ impl<W: Write> Interpreter<W> {
             Literal::True => LBool(true),
             Literal::False => LBool(false),
             Literal::Nil => LNil,
+        }
+    }
+
+    fn interpret_superclass(
+        &mut self,
+        superclass_var: &Expr,
+        environment: Rc<LoxEnvironment>,
+    ) -> Result<Rc<LoxClass>, InterpreterError> {
+        match superclass_var {
+            Expr::Variable { line, name, .. } => {
+                let super_value = self.interpret_expression(superclass_var, environment.clone())?;
+                return match super_value {
+                    LClass(lox_superclass) => Ok(lox_superclass),
+                    _ => Err(InterpreterError::SuperclassMustBeAClass {
+                        line: *line,
+                        name: name.clone(),
+                    }),
+                };
+            }
+            _ => unreachable!("this interpreter expects superclass to be a variable"),
         }
     }
 }

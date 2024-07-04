@@ -24,6 +24,8 @@ pub enum VariableResolverError {
     ThisNotAllowed { line: usize },
     #[error("[line {line}] Error at 'return': Can't return a value from an initializer.")]
     ReturnFromInitializer { line: usize },
+    #[error("[line {line}] Error at '{name}': A class can't inherit from itself.")]
+    ClassCannotInheritFromItself { name: String, line: usize },
 }
 #[derive(Debug, Copy, Clone, PartialEq)]
 enum ClassNestingStatus {
@@ -194,12 +196,30 @@ impl VariableResolver {
                 name,
                 methods,
                 line,
-                superclass: _superclass,
+                superclass,
             } => {
                 let previous_current_class = self.current_class;
                 self.current_class = ClassNestingStatus::InClass;
                 self.declare(name.clone(), *line)?;
                 self.define(name.clone());
+
+                if let Some(superclass_var) = superclass {
+                    if let Expr::Variable {
+                        name: super_name,
+                        line,
+                        ..
+                    } = superclass_var.as_ref()
+                    {
+                        if super_name == name {
+                            return Err(VariableResolverError::ClassCannotInheritFromItself {
+                                name: name.clone(),
+                                line: *line,
+                            });
+                        }
+                    }
+                    self.resolve_expr(superclass_var)?;
+                }
+
                 for statement in methods {
                     match statement {
                         Statement::FunctionDeclaration { name, parameters, body, line } => {
