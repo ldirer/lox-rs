@@ -282,12 +282,19 @@ impl VariableResolver {
                 let new_depth = self.find_variable(name.clone());
                 match new_depth {
                     None => {
-                        return Err(
-                            VariableResolverError::LocalVariableSelfReferencedInInitializer {
-                                line: *line,
-                                name: name.clone(),
-                            },
-                        );
+                        let is_global = self.scope_stack.len() == 1;
+                        // it's ok to use a global variable in its initializer because we can redefine global variables.
+                        // Ex (this is valid): var a = 0; var a = a + 1;
+                        if is_global {
+                            *depth = Some(0);
+                        } else {
+                            return Err(
+                                VariableResolverError::LocalVariableSelfReferencedInInitializer {
+                                    line: *line,
+                                    name: name.clone(),
+                                },
+                            );
+                        }
                     }
                     Some(_) => {
                         *depth = new_depth;
