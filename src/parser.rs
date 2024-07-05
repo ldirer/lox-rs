@@ -1,112 +1,112 @@
 use std::iter::Peekable;
 
-use thiserror::Error;
-
 use crate::ast::Statement::ReturnStatement;
 use crate::ast::{
     BinaryLogicalOperator, BinaryLogicalOperatorType, BinaryOperator, BinaryOperatorType, Expr,
     FunctionParameter, FunctionType, Literal, Statement, UnaryOperator, UnaryOperatorType,
 };
 use crate::token::{Token, TokenType};
+use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ParserError {
-    #[error("[line {line}] Error at '{lexeme}': Expect ')' after expression.")]
+    #[error("[line {line}] Error at {lexeme}: Expect ')' after expression.")]
     UnmatchedParenthesis { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect ';' after value.")]
+    #[error("[line {line}] Error at {lexeme}: Expect ';' after value.")]
     MissingSemicolonPrint { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect ';' after expression.")]
+    #[error("[line {line}] Error at {lexeme}: Expect ';' after expression.")]
     MissingSemicolonExpressionStatement { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect ';' after loop condition.")]
+    #[error("[line {line}] Error at {lexeme}: Expect ';' after loop condition.")]
     MissingSemicolonLoopCondition { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect variable name.")]
+    #[error("[line {line}] Error at {lexeme}: Expect variable name.")]
     InvalidSyntaxVarDeclaration { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect ';' after variable declaration.")]
+    #[error("[line {line}] Error at {lexeme}: Expect ';' after variable declaration.")]
     MissingSemicolonVariableDeclaration { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Invalid assignment target.")]
+    #[error("[line {line}] Error at {lexeme}: Invalid assignment target.")]
     InvalidAssignmentTarget { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Unclosed block, expected '}}'.")]
+    #[error("[line {line}] Error at {lexeme}: Unclosed block, expected '}}'.")]
     UnclosedBlock { line: usize, lexeme: String },
     // these dedicated error types... dont feel very useful.
-    #[error("[line {line}] Error at '{lexeme}': Expect '(' after 'while'.")]
+    #[error("[line {line}] Error at {lexeme}: Expect '(' after 'while'.")]
     MissingOpeningParenthesisWhile { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect ')' after condition.")]
+    #[error("[line {line}] Error at {lexeme}: Expect ')' after condition.")]
     MissingClosingParenthesisCondition { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect '(' after 'if'.")]
+    #[error("[line {line}] Error at {lexeme}: Expect '(' after 'if'.")]
     MissingOpeningParenthesisIf { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect '(' after 'for'.")]
+    #[error("[line {line}] Error at {lexeme}: Expect '(' after 'for'.")]
     MissingOpeningParenthesisFor { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect ')' after 'for' clauses.")]
+    #[error("[line {line}] Error at {lexeme}: Expect ')' after 'for' clauses.")]
     MissingClosingParenthesisFor { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect ')' after call arguments.")]
+    #[error("[line {line}] Error at {lexeme}: Expect ')' after call arguments.")]
     MissingClosingParenthesisInCall { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect {function_type} name.")]
+    #[error("[line {line}] Error at {lexeme}: Expect {function_type} name.")]
     FunctionIdentifierExpected {
         function_type: FunctionType,
         line: usize,
         lexeme: String,
     },
-    #[error("[line {line}] Error at '{lexeme}': Expect class name.")]
+    #[error("[line {line}] Error at {lexeme}: Expect class name.")]
     ClassIdentifierExpected { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect '{{' after class name.")]
+    #[error("[line {line}] Error at {lexeme}: Expect '{{' after class name.")]
     MissingOpeningBraceClass { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect '}}' after method declarations.")]
+    #[error("[line {line}] Error at {lexeme}: Expect '}}' after method declarations.")]
     MissingClosingBraceClass { line: usize, lexeme: String },
 
-    #[error("[line {line}] Error at '{lexeme}': Expect '(' after {function_type} name.")]
+    #[error("[line {line}] Error at {lexeme}: Expect '(' after {function_type} name.")]
     MissingOpeningParenthesisFunction {
         function_type: FunctionType,
         line: usize,
         lexeme: String,
     },
-    #[error("[line {line}] Error at '{lexeme}': Expect {function_type} parameter identifier.")]
+    #[error("[line {line}] Error at {lexeme}: Expect {function_type} parameter identifier.")]
     FunctionExpectedParameterName {
         function_type: FunctionType,
         line: usize,
         lexeme: String,
     },
-    #[error("[line {line}] Error at '{lexeme}': Expect ')' after parameters.")]
+    #[error("[line {line}] Error at {lexeme}: Expect ')' after parameters.")]
     MissingClosingParenthesisFunction {
         function_type: FunctionType,
         line: usize,
         lexeme: String,
     },
-    #[error("[line {line}] Error at '{lexeme}': Expect '{{' before {function_type} body.")]
+    #[error("[line {line}] Error at {lexeme}: Expect '{{' before {function_type} body.")]
     MissingOpeningBraceFunction {
         function_type: FunctionType,
         line: usize,
         lexeme: String,
     },
-    #[error("[line {line}] Error at '{lexeme}': Expect '}}' to close {function_type} body.")]
+    #[error("[line {line}] Error at {lexeme}: Expect '}}' to close {function_type} body.")]
     MissingClosingBraceFunction {
         function_type: FunctionType,
         line: usize,
         lexeme: String,
     },
 
-    #[error("[line {line}] Error at '{lexeme}': Expect expression.")]
+    #[error("[line {line}] Error at {lexeme}: Expect expression.")]
     ExpectExpression { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Can't have more than 255 parameters.")]
+    #[error("[line {line}] Error at {lexeme}: Can't have more than 255 parameters.")]
     FunctionTooManyParameters {
         function_type: FunctionType,
         line: usize,
         lexeme: String,
     },
 
-    #[error("[line {line}] Error at '{lexeme}': Can't have more than 255 arguments.")]
+    #[error("[line {line}] Error at {lexeme}: Can't have more than 255 arguments.")]
     FunctionCallTooManyArguments { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect property name after '.'.")]
+    #[error("[line {line}] Error at {lexeme}: Expect property name after '.'.")]
     ExpectPropertyAccessName { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect superclass name.")]
+    #[error("[line {line}] Error at {lexeme}: Expect superclass name.")]
     ExpectSuperclassName { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect '.' after 'super'.")]
+    #[error("[line {line}] Error at {lexeme}: Expect '.' after 'super'.")]
     ExpectDotAfterSuper { line: usize, lexeme: String },
-    #[error("[line {line}] Error at '{lexeme}': Expect superclass method name.")]
+    #[error("[line {line}] Error at {lexeme}: Expect superclass method name.")]
     ExpectMethodAfterSuper { line: usize, lexeme: String },
 }
 
 pub struct Parser<T: Iterator<Item = Token>> {
     tokens: Peekable<T>,
+    previous_token: Option<Token>,
     errors: Vec<ParserError>,
 }
 
@@ -129,6 +129,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         let tokens = tokens.peekable();
         Parser {
             tokens,
+            previous_token: None,
             errors: vec![],
         }
     }
@@ -199,7 +200,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         )?;
 
         let mut methods = vec![];
-        while !self.is_at_end() && self.check(TokenType::RightBrace).is_none() {
+        while !self.is_at_end() && self.check(&TokenType::RightBrace).is_none() {
             methods.push(self.parse_function_declaration(FunctionType::Method)?);
         }
 
@@ -247,7 +248,6 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             .is_some_and(|t| t.r#type != TokenType::RightParen)
         {
             loop {
-                // note there is no limit on the number of parameters for now (the book sets a 255 max)
                 let token = self.match_current(&vec![TokenType::Identifier]);
                 match token {
                     None => {
@@ -259,19 +259,18 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                         });
                     }
                     Some(t) => {
-                        if parameters.len() >= 255 {
-                            // we should not stop parsing here. We want to report the error but the parsing is in a clean state.
-                            // looks like this is a bit tricky, leaving it aside for now.
-                            return Err(ParserError::FunctionTooManyParameters {
-                                function_type,
-                                line: t.line,
-                                lexeme: t.lexeme.clone(),
-                            });
-                        }
                         parameters.push(FunctionParameter {
                             name: t.lexeme.clone(),
                             line: t.line,
                         });
+                        if parameters.len() > 255 {
+                            // we should not stop parsing here. We want to report the error but the parser is in a clean state.
+                            self.errors.push(ParserError::FunctionTooManyParameters {
+                                function_type,
+                                line: t.line,
+                                lexeme: error_lexeme(&t),
+                            });
+                        }
                     }
                 }
                 if self.match_current(&vec![TokenType::Comma]).is_none() {
@@ -517,6 +516,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     fn parse_return_statement(&mut self) -> Result<Statement, ParserError> {
+        let return_line = self.previous_token.as_ref().unwrap().line;
         let mut expr = None;
         if self
             .tokens
@@ -533,8 +533,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         )?;
         return Ok(ReturnStatement {
             expression: expr,
-            // this is not necessarily the correct line number, we should be using the line of the return token.
-            line,
+            line: return_line,
         });
     }
 
@@ -578,7 +577,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             }
             (Some(token), _) => Err(ParserError::InvalidAssignmentTarget {
                 line: token.line,
-                lexeme: token.lexeme.to_string(),
+                lexeme: error_lexeme(&token),
             }),
         }
     }
@@ -730,8 +729,10 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             while self.match_current(&vec![TokenType::Comma]).is_some() {
                 args.push(self.parse_expression()?);
                 if args.len() > 255 {
-                    let TokenInfo { line, lexeme } = self.get_current_token_info();
-                    return Err(ParserError::FunctionCallTooManyArguments { line, lexeme });
+                    self.errors.push(ParserError::FunctionCallTooManyArguments {
+                        line: self.previous_token.as_ref().unwrap().line,
+                        lexeme: error_lexeme(self.previous_token.as_ref().unwrap()),
+                    });
                 }
             }
         }
@@ -805,11 +806,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             }
             _ => Err(ParserError::ExpectExpression {
                 line: token.line,
-                lexeme: if token.r#type == TokenType::EOF {
-                    "end".to_string()
-                } else {
-                    token.lexeme
-                },
+                lexeme: error_lexeme(&token),
             }),
         }
     }
@@ -817,19 +814,19 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     /// a better api for this might be to return an Option<Token>
     fn match_current(&mut self, token_types: &Vec<TokenType>) -> Option<Token> {
         for token_type in token_types {
-            let matched = self.tokens.next_if(|t| t.r#type == *token_type);
-            if matched.is_some() {
-                return matched;
+            if self.check(token_type).is_some() {
+                return self.advance();
             }
         }
         None
     }
-    fn check(&mut self, token_type: TokenType) -> Option<&Token> {
-        self.tokens.peek().filter(|t| t.r#type == token_type)
+    fn check(&mut self, token_type: &TokenType) -> Option<&Token> {
+        self.tokens.peek().filter(|t| &t.r#type == token_type)
     }
 
     fn advance(&mut self) -> Option<Token> {
         let token = self.tokens.next();
+        self.previous_token = token.clone();
         token
     }
 
@@ -910,13 +907,20 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     fn get_current_token_info(&mut self) -> TokenInfo {
         let token = self.tokens.peek().unwrap();
         let line = token.line;
-        let mut lexeme = token.lexeme.clone();
-        if token.r#type == TokenType::EOF {
-            lexeme = "end".to_string();
-        }
+        let lexeme = error_lexeme(token);
         return TokenInfo { line, lexeme };
     }
 }
+
+/// hack to make sure error messages match the official test suite
+fn error_lexeme(token: &Token) -> String {
+    let mut lexeme = format!("'{}'", token.lexeme.clone());
+    if token.r#type == TokenType::EOF {
+        lexeme = "end".to_string();
+    }
+    lexeme
+}
+
 struct TokenInfo {
     line: usize,
     lexeme: String,
