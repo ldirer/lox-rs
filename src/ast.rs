@@ -26,7 +26,7 @@ pub enum Statement {
     },
     FunctionDeclaration {
         name: String,
-        parameters: Vec<String>,
+        parameters: Vec<FunctionParameter>,
         body: Vec<Statement>,
         line: usize,
     },
@@ -45,6 +45,11 @@ pub enum Statement {
     PrintStatement {
         expression: Expr,
     },
+}
+#[derive(Debug, PartialEq, Clone)]
+pub struct FunctionParameter {
+    pub(crate) line: usize,
+    pub(crate) name: String,
 }
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {

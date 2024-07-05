@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::ast::{Expr, FunctionType, Statement};
+use crate::ast::{Expr, FunctionParameter, FunctionType, Statement};
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 enum VariableStatus {
@@ -257,7 +257,7 @@ impl VariableResolver {
     fn resolve_function_declaration(
         &mut self,
         name: &String,
-        parameters: &Vec<String>,
+        parameters: &Vec<FunctionParameter>,
         body: &mut Vec<Statement>,
         line: &usize,
         function_type: FunctionType,
@@ -289,8 +289,8 @@ impl VariableResolver {
 
         for parameter in parameters {
             // mark as defined because they will be when the function runs.
-            self.declare(parameter.clone(), *line)?;
-            self.define(parameter.clone());
+            self.declare(parameter.name.clone(), parameter.line)?;
+            self.define(parameter.name.clone());
         }
         for statement in body {
             self.resolve_statement(statement)?;

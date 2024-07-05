@@ -5,7 +5,7 @@ use thiserror::Error;
 use crate::ast::Statement::ReturnStatement;
 use crate::ast::{
     BinaryLogicalOperator, BinaryLogicalOperatorType, BinaryOperator, BinaryOperatorType, Expr,
-    FunctionType, Literal, Statement, UnaryOperator, UnaryOperatorType,
+    FunctionParameter, FunctionType, Literal, Statement, UnaryOperator, UnaryOperatorType,
 };
 use crate::token::{Token, TokenType};
 
@@ -268,7 +268,10 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                                 lexeme: t.lexeme.clone(),
                             });
                         }
-                        parameters.push(t.lexeme);
+                        parameters.push(FunctionParameter {
+                            name: t.lexeme.clone(),
+                            line: t.line,
+                        });
                     }
                 }
                 if self.match_current(&vec![TokenType::Comma]).is_none() {
@@ -987,7 +990,8 @@ mod tests {
     use crate::ast::Statement::{ExprStatement, ReturnStatement};
     use crate::ast::{
         format_lisp_like, BinaryLogicalOperator, BinaryLogicalOperatorType, BinaryOperator,
-        BinaryOperatorType, Expr, Literal, Statement, UnaryOperator, UnaryOperatorType,
+        BinaryOperatorType, Expr, FunctionParameter, Literal, Statement, UnaryOperator,
+        UnaryOperatorType,
     };
     use crate::parser::{Parser, ParserError};
     use crate::test_helpers::{parse_expr, parse_program, parse_statement};
@@ -1149,7 +1153,16 @@ mod tests {
             Statement::FunctionDeclaration {
                 line: 1,
                 name: "fibonacci".to_string(),
-                parameters: vec!["n".to_string(), "debug".to_string()],
+                parameters: vec![
+                    FunctionParameter {
+                        name: "n".to_string(),
+                        line: 1
+                    },
+                    FunctionParameter {
+                        name: "debug".to_string(),
+                        line: 1
+                    }
+                ],
                 body: vec![ReturnStatement {
                     line: 1,
                     expression: Some(Expr::Binary {

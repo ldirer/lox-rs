@@ -297,7 +297,7 @@ impl<W: Write> Interpreter<W> {
                     name.clone(),
                     LoxValue::LFunc(Rc::new(LoxFunction {
                         name: name.clone(),
-                        parameters: parameters.clone(),
+                        parameters: parameters.iter().map(|p| p.name.clone()).collect(),
                         body: body.clone(),
                         environment: environment.clone(),
                         is_initializer: false,
@@ -330,7 +330,7 @@ impl<W: Write> Interpreter<W> {
                                 method_env = Rc::new(LoxEnvironment::new_with_parent(method_env));
                                 method_env.define("super".to_string(), LoxValue::LClass(superclass.clone()));
                             }
-                            let method = LoxFunction{name: name.clone(), parameters: parameters.clone(), body: body.clone(), environment: method_env, is_initializer: name == CONSTRUCTOR_RESERVED_NAME };
+                            let method = LoxFunction{name: name.clone(), parameters: parameters.iter().map(|p|p.name.clone()).collect(), body: body.clone(), environment: method_env, is_initializer: name == CONSTRUCTOR_RESERVED_NAME };
                             lox_methods.insert(name.clone(), Rc::new(method));
                         }
                         _ => panic!("internal error: interpreter expects only function declarations in a class declaration node")
