@@ -83,7 +83,7 @@ pub enum Expr {
     // making this a wrapper around variable for convenience (so everything goes through the resolver the same way) but it's a bit lame.
     This(Box<Expr>),
     Variable {
-        // depth is ignored by the parser and populated later by the resolver
+        // depth is ignored by the parser and populated later by the resolver. Number of environments we need to look _up_ to find the variable (0=current, local-most environment).
         depth: Option<usize>,
         line: usize,
         name: String,
