@@ -18,7 +18,7 @@ use crate::environment::{Environment, EnvironmentError};
 use crate::interpreter::InterpreterError::UndefinedVariable;
 use crate::interpreter::LoxValue::*;
 const CONSTRUCTOR_RESERVED_NAME: &str = "init";
-type LoxEnvironment = Environment<LoxValue>;
+pub type LoxEnvironment = Environment<LoxValue>;
 #[derive(Debug, PartialEq, Error)]
 pub enum InterpreterError {
     #[error("[line {line}] runtime error: Operands must be two numbers or two strings.")]
@@ -64,7 +64,7 @@ impl InterpreterError {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-enum LoxValue {
+pub enum LoxValue {
     LString(String),
     LNumber(f64),
     LBool(bool),
@@ -89,7 +89,7 @@ impl Display for LoxValue {
 }
 
 #[derive(Clone)]
-struct LoxFunction {
+pub struct LoxFunction {
     name: String,
     parameters: Vec<String>,
     body: Vec<Statement>,
@@ -133,7 +133,7 @@ impl PartialEq for LoxFunction {
 }
 
 #[derive(Clone)]
-struct LoxClass {
+pub struct LoxClass {
     name: String,
     superclass: Option<Rc<LoxClass>>,
     methods: HashMap<String, Rc<LoxFunction>>,
@@ -163,7 +163,7 @@ impl PartialEq for LoxClass {
     }
 }
 #[derive(Clone, PartialEq, Debug)]
-struct LoxInstance {
+pub struct LoxInstance {
     class: Rc<LoxClass>,
     fields: RefCell<HashMap<String, LoxValue>>,
 }
@@ -217,7 +217,7 @@ impl<W: Write> Interpreter<W> {
         self.interpret_program_with_env(program, environment)
     }
 
-    fn interpret_program_with_env(
+    pub fn interpret_program_with_env(
         &mut self,
         program: &Vec<Statement>,
         environment: Rc<LoxEnvironment>,

@@ -6,17 +6,17 @@ use thiserror::Error;
 use crate::token::{Token, TokenType};
 
 /// public interface for tokenizing
-pub fn tokenize(source: String, error_reporter: fn(ScanningError) -> ()) -> Vec<Token> {
+pub fn tokenize(source: String, error_reporter: impl FnMut(ScanningError)) -> Vec<Token> {
     let mut scanner = Scanner::new(&source, error_reporter);
     scanner.scan_tokens();
     scanner.tokens
 }
 
-struct Scanner<'a> {
+struct Scanner<'a, ErrorHandlerT: FnMut(ScanningError)> {
     source: &'a str,
     char_iter: Peekable<Chars<'a>>,
     tokens: Vec<Token>,
-    error_reporter: fn(ScanningError) -> (),
+    error_reporter: ErrorHandlerT,
 
     // position of the start of lexeme
     current_lexeme_start: usize,
@@ -44,8 +44,8 @@ impl ScanningError {
     }
 }
 
-impl Scanner<'_> {
-    fn new(source: &str, error_reporter: fn(ScanningError) -> ()) -> Scanner {
+impl<ErrorHandlerT: FnMut(ScanningError)> Scanner<'_, ErrorHandlerT> {
+    fn new(source: &str, error_reporter: ErrorHandlerT) -> Scanner<ErrorHandlerT> {
         Scanner {
             source,
             char_iter: source.chars().peekable(),
@@ -60,7 +60,7 @@ impl Scanner<'_> {
         while !self.is_at_end() {
             let maybe_error = self.scan_token();
             if let Err(scanning_error) = maybe_error {
-                (self.error_reporter)(scanning_error)
+                (self.error_reporter)(scanning_error);
             }
         }
         self.tokens.push(Token {

@@ -3,11 +3,14 @@ use std::fs::read_to_string;
 use std::io::Write;
 use std::path::Path;
 use std::process::exit;
+use std::rc::Rc;
 use std::{env, io};
 
 use thiserror::Error;
 
-use crate::interpreter::Interpreter;
+use repl::MultilineInput;
+
+use crate::interpreter::{Interpreter, LoxEnvironment};
 use crate::parser::parse;
 use crate::resolver::VariableResolver;
 use crate::scanner::{tokenize, ScanningError};
@@ -16,6 +19,7 @@ mod ast;
 mod environment;
 mod interpreter;
 mod parser;
+mod repl;
 mod resolver;
 mod scanner;
 mod test_helpers;
@@ -27,8 +31,6 @@ enum CLIError {
     IoError(#[from] std::io::Error),
     #[error("file does not seem to exist {0}")]
     FileDoesNotExist(String),
-    //     TODO need to add a 'catch all' error if I want to return interpreter/parser/scanning errors?
-    // handling them is all well and nice but this means we don't have a stacktrace...
 }
 
 fn main() -> Result<(), color_eyre::eyre::Error> {
@@ -44,7 +46,7 @@ fn main() -> Result<(), color_eyre::eyre::Error> {
         let file_path = &args[1];
         run_file(file_path)?;
     } else {
-        run_prompt()?;
+        run_repl()?;
     }
     Ok(())
 }
@@ -59,29 +61,45 @@ fn run_file(path_string: &String) -> Result<(), CLIError> {
         return Err(CLIError::FileDoesNotExist(String::to_string(path_string)));
     }
     let self_content = read_to_string(path)?;
-    run(self_content);
+    run(None, self_content, true);
     return Ok(());
 }
 
-fn run_prompt() -> Result<(), CLIError> {
+fn run_repl() -> Result<(), CLIError> {
     fn prompt() {
+        // I ran into a weird behavior where the prompt is not shown in past commands.
+        // looks like it is caused by `rlwrap`, if I run the program directly there is no issue.
         print!("> ");
         io::stdout().flush().unwrap();
     }
 
+    let repl_env = Rc::new(LoxEnvironment::new(None));
+
     let lines = io::stdin().lines();
     prompt();
-    for line in lines {
-        // TODO reset error status somehow
-        run(line.unwrap());
+    let inputs = MultilineInput::new(lines);
+    for input in inputs {
+        run(Some(repl_env.clone()), input, false);
         prompt();
     }
     Ok(())
 }
 
-fn run(source: String) {
-    // passing a 'handle error' callback to stick to the book.
-    let tokens = tokenize(source, scanner_error);
+fn run(environment: Option<Rc<LoxEnvironment>>, source: String, exit_on_error: bool) {
+    // passing a 'handle error' callback to stick to the book. Did not follow this pattern for the rest (parser, etc).
+    let mut handler = ScannerErrorHandler::new();
+    let tokens = tokenize(source, |err| handler.handle(err));
+    for err in &handler.errors {
+        let line = err.get_line();
+        eprintln!("[line {line}] Error: {err}");
+    }
+    if handler.errors.len() > 0 {
+        if exit_on_error {
+            exit(65);
+        }
+        return;
+    }
+
     // println!("{:#?}", tokens);
     let parsed = parse(tokens.into_iter());
     // println!("{:#?}", parsed);
@@ -94,17 +112,25 @@ fn run(source: String) {
             for err in errors {
                 eprintln!("{err}");
             }
-            exit(65)
+            if exit_on_error {
+                exit(65);
+            }
         }
         Ok(mut statements) => {
             if let Err(errors) = resolver_.resolve_program(&mut statements) {
                 for err in errors {
                     eprintln!("{err}");
                 }
-                exit(65)
+                if exit_on_error {
+                    exit(65);
+                }
             }
             // println!("{:#?}", statements);
-            match interpreter.interpret_program(&statements) {
+            let interpreted = match environment {
+                None => interpreter.interpret_program(&statements),
+                Some(env) => interpreter.interpret_program_with_env(&statements, env),
+            };
+            match interpreted {
                 Ok(_) => {}
                 Err(err) => {
                     // making the format of what we print consistent with what the Java version does
@@ -120,27 +146,24 @@ fn run(source: String) {
                             .unwrap()
                     );
                     eprintln!("{err}");
-                    exit(70)
+                    if exit_on_error {
+                        exit(70);
+                    }
                 }
             }
         }
     }
 }
 
-fn scanner_error(err: ScanningError) {
-    report(err.get_line(), "", &format!("{err}"));
+struct ScannerErrorHandler {
+    pub errors: Vec<ScanningError>,
 }
 
-fn report(line: usize, location: &str, message: &str) {
-    eprintln!("[line {line}] Error{location}: {message}");
-    exit(65)
-    //     TODO had_error = true
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_scanner() {
-        assert_eq!(2, 1 + 1)
+impl ScannerErrorHandler {
+    fn new() -> ScannerErrorHandler {
+        ScannerErrorHandler { errors: vec![] }
+    }
+    fn handle(&mut self, error: ScanningError) {
+        self.errors.push(error);
     }
 }

@@ -92,6 +92,9 @@ pub enum ParserError {
         line: usize,
         lexeme: String,
     },
+
+    #[error("[line {line}] Error at '{lexeme}': Can't have more than 255 arguments.")]
+    FunctionCallTooManyArguments { line: usize, lexeme: String },
     #[error("[line {line}] Error at '{lexeme}': Expect property name after '.'.")]
     ExpectPropertyAccessName { line: usize, lexeme: String },
     #[error("[line {line}] Error at '{lexeme}': Expect superclass name.")]
@@ -147,7 +150,6 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         match parsed {
             Ok(statement) => Some(statement),
             Err(err) => {
-                eprintln!("collecting error {err}");
                 self.errors.push(err);
                 self.recover();
                 return None;
@@ -724,6 +726,10 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             args.push(self.parse_expression()?);
             while self.match_current(&vec![TokenType::Comma]).is_some() {
                 args.push(self.parse_expression()?);
+                if args.len() > 255 {
+                    let TokenInfo { line, lexeme } = self.get_current_token_info();
+                    return Err(ParserError::FunctionCallTooManyArguments { line, lexeme });
+                }
             }
         }
         let TokenInfo { line, lexeme } = self.get_current_token_info();

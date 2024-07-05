@@ -1,0 +1,3 @@
+// does the parsing stop (1)? Or do we print "unexpected characters" many times (2)?
+// jlox does 2, clox does 1.
+var a ||||||||||;
