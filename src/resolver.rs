@@ -1,8 +1,9 @@
 use std::collections::HashMap;
-
+use std::rc::Rc;
 use thiserror::Error;
 
 use crate::ast::{Expr, FunctionParameter, FunctionType, Statement};
+use crate::interpreter::{get_globals, LoxEnvironment};
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 enum VariableStatus {
@@ -52,9 +53,14 @@ pub struct VariableResolver {
 
 impl VariableResolver {
     pub fn new() -> VariableResolver {
+        // this is not great: adding a dependency on lox environment just for the globals... yikes.
+        let globals = get_globals(Rc::new(LoxEnvironment::new(None)));
         VariableResolver {
             // start with one item for globals
-            scope_stack: vec![HashMap::new()],
+            scope_stack: vec![globals
+                .iter()
+                .map(|(name, _)| (name.clone(), VariableStatus::Defined))
+                .collect()],
             current_function: FunctionNestingStatus::None,
             current_class: ClassNestingStatus::None,
         }

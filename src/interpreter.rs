@@ -5,7 +5,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::io::Write;
 use std::iter::zip;
 use std::rc::Rc;
-
+use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 use BinaryOperatorType::*;
@@ -70,6 +70,7 @@ pub enum LoxValue {
     LBool(bool),
     LNil,
     LFunc(Rc<LoxFunction>),
+    LNativeFunc(Rc<LoxNativeFunction>),
     LClass(Rc<LoxClass>),
     LInstance(Rc<LoxInstance>),
 }
@@ -77,13 +78,14 @@ pub enum LoxValue {
 impl Display for LoxValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            LFunc(func) => write!(f, "<fn {}>\n", func.name),
+            LFunc(func) => write!(f, "<fn {}>", func.name),
             LString(s) => write!(f, "{}", s),
             LNumber(n) => write!(f, "{}", n),
             LBool(b) => write!(f, "{}", b),
             LNil => write!(f, "nil"),
             LClass(class) => write!(f, "{}", class.name),
             LInstance(instance) => write!(f, "{} instance", instance.class.name),
+            LNativeFunc(_) => write!(f, "<native fn>"),
         }
     }
 }
@@ -128,6 +130,21 @@ impl PartialEq for LoxFunction {
         self.name == other.name
             && self.parameters == other.parameters
             && self.body == other.body
+            && std::ptr::eq(&self.environment, &other.environment)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct LoxNativeFunction {
+    name: String,
+    parameters: Vec<String>,
+    environment: Rc<LoxEnvironment>,
+    call: fn(Rc<LoxEnvironment>, Vec<LoxValue>) -> Result<LoxValue, InterpreterError>,
+}
+impl PartialEq for LoxNativeFunction {
+    fn eq(&self, other: &LoxNativeFunction) -> bool {
+        self.name == other.name
+            && self.parameters == other.parameters
             && std::ptr::eq(&self.environment, &other.environment)
     }
 }
@@ -222,6 +239,11 @@ impl<W: Write> Interpreter<W> {
         program: &Vec<Statement>,
         environment: Rc<LoxEnvironment>,
     ) -> Result<(), InterpreterError> {
+        let globals = get_globals(environment.clone());
+        for (name, lox_value) in globals {
+            environment.define(name, lox_value);
+        }
+
         for statement in program {
             self.interpret_statement(statement, environment.clone())?;
         }
@@ -560,9 +582,20 @@ impl<W: Write> Interpreter<W> {
     ) -> Result<LoxValue, InterpreterError> {
         match value {
             LFunc(lox_function) => self.interpret_function_call(lox_function, arguments, line),
+            LNativeFunc(lox_native_function) => {
+                self.interpret_native_function_call(lox_native_function, arguments)
+            }
             LClass(lox_class) => self.interpret_class_call(lox_class.clone(), arguments, line),
             _ => return Err(InterpreterError::CannotCall { line }),
         }
+    }
+
+    fn interpret_native_function_call(
+        &self,
+        lox_native_function: &Rc<LoxNativeFunction>,
+        arguments: Vec<LoxValue>,
+    ) -> Result<LoxValue, InterpreterError> {
+        (lox_native_function.call)(lox_native_function.environment.clone(), arguments)
     }
 
     fn interpret_function_call(
@@ -691,6 +724,25 @@ fn is_truthy(v: &LoxValue) -> bool {
         LBool(value) => *value,
         _ => true,
     }
+}
+
+pub fn get_globals(environment: Rc<LoxEnvironment>) -> HashMap<String, LoxValue> {
+    let clock = LNativeFunc(Rc::new(LoxNativeFunction {
+        name: "clock".to_string(),
+        parameters: vec![],
+        environment: environment.clone(),
+        call: |_env, _args| {
+            let start = SystemTime::now();
+            return Ok(LoxValue::LNumber(
+                // conversion isn't safe but it does not matter here.
+                start
+                    .duration_since(UNIX_EPOCH)
+                    .expect("time went backwards")
+                    .as_secs() as f64,
+            ));
+        },
+    }));
+    return HashMap::from([("clock".to_string(), clock)]);
 }
 
 #[cfg(test)]
