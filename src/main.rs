@@ -87,17 +87,14 @@ fn run_repl() -> Result<(), CLIError> {
 
 fn run(environment: Option<Rc<LoxEnvironment>>, source: String, exit_on_error: bool) {
     // passing a 'handle error' callback to stick to the book. Did not follow this pattern for the rest (parser, etc).
-    let mut handler = ScannerErrorHandler::new();
-    let tokens = tokenize(source, |err| handler.handle(err));
-    for err in &handler.errors {
+    let mut scanner_error_handler = ScannerErrorHandler::new();
+    let tokens = tokenize(source, |err| scanner_error_handler.handle(err));
+
+    for err in &scanner_error_handler.errors {
+        // print scanning errors but don't exit/return: we want to run the parser too.
+        // this is to make official tests pass. I guess maybe this is done in the book to report relevant errors to the user in one pass?
         let line = err.get_line();
         eprintln!("[line {line}] Error: {err}");
-    }
-    if handler.errors.len() > 0 {
-        if exit_on_error {
-            exit(65);
-        }
-        return;
     }
 
     // println!("{:#?}", tokens);
@@ -117,6 +114,13 @@ fn run(environment: Option<Rc<LoxEnvironment>>, source: String, exit_on_error: b
             }
         }
         Ok(mut statements) => {
+            // don't run code that didn't pass scanning
+            if scanner_error_handler.errors.len() > 0 {
+                if exit_on_error {
+                    exit(65);
+                }
+                return;
+            }
             if let Err(errors) = resolver_.resolve_program(&mut statements) {
                 for err in errors {
                     eprintln!("{err}");

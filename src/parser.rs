@@ -26,7 +26,6 @@ pub enum ParserError {
     InvalidAssignmentTarget { line: usize, lexeme: String },
     #[error("[line {line}] Error at {lexeme}: Unclosed block, expected '}}'.")]
     UnclosedBlock { line: usize, lexeme: String },
-    // these dedicated error types... dont feel very useful.
     #[error("[line {line}] Error at {lexeme}: Expect '(' after 'while'.")]
     MissingOpeningParenthesisWhile { line: usize, lexeme: String },
     #[error("[line {line}] Error at {lexeme}: Expect ')' after condition.")]
@@ -37,7 +36,7 @@ pub enum ParserError {
     MissingOpeningParenthesisFor { line: usize, lexeme: String },
     #[error("[line {line}] Error at {lexeme}: Expect ')' after 'for' clauses.")]
     MissingClosingParenthesisFor { line: usize, lexeme: String },
-    #[error("[line {line}] Error at {lexeme}: Expect ')' after call arguments.")]
+    #[error("[line {line}] Error at {lexeme}: Expect ')' after arguments.")]
     MissingClosingParenthesisInCall { line: usize, lexeme: String },
     #[error("[line {line}] Error at {lexeme}: Expect {function_type} name.")]
     FunctionIdentifierExpected {
