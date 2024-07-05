@@ -90,13 +90,17 @@ fn run(source: String) {
 
     let mut resolver_ = VariableResolver::new();
     match parsed {
-        Err(err) => {
-            eprintln!("{err}");
+        Err(errors) => {
+            for err in errors {
+                eprintln!("{err}");
+            }
             exit(65)
         }
         Ok(mut statements) => {
-            if let Err(err) = resolver_.resolve_program(&mut statements) {
-                eprintln!("{err}");
+            if let Err(errors) = resolver_.resolve_program(&mut statements) {
+                for err in errors {
+                    eprintln!("{err}");
+                }
                 exit(65)
             }
             // println!("{:#?}", statements);

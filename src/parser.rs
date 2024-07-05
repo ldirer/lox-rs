@@ -104,29 +104,55 @@ pub enum ParserError {
 
 pub struct Parser<T: Iterator<Item = Token>> {
     tokens: Peekable<T>,
+    errors: Vec<ParserError>,
 }
 
-pub fn parse<T>(tokens: T) -> Result<Vec<Statement>, ParserError>
+pub fn parse<T>(tokens: T) -> Result<Vec<Statement>, Vec<ParserError>>
 where
     T: Iterator<Item = Token>,
 {
     let mut parser = Parser::new(tokens);
-    parser.parse_program()
+    let statements = parser.parse_program();
+    if parser.errors.len() > 0 {
+        // a result might not be the best interface, we could imagine wanting to access statements even if there were errors.
+        // but it's sufficient for our use.
+        return Err(parser.errors);
+    }
+    Ok(statements)
 }
 
 impl<T: Iterator<Item = Token>> Parser<T> {
     pub(crate) fn new(tokens: T) -> Self {
         let tokens = tokens.peekable();
-        Parser { tokens }
+        Parser {
+            tokens,
+            errors: vec![],
+        }
     }
 
     // clean error handling not the focus yet
-    pub fn parse_program(&mut self) -> Result<Vec<Statement>, ParserError> {
+    pub fn parse_program(&mut self) -> Vec<Statement> {
         let mut statements: Vec<Statement> = vec![];
         while !self.is_at_end() {
-            statements.push(self.parse_declaration()?);
+            match self.safe_parse_declaration() {
+                None => {}
+                Some(statement) => statements.push(statement),
+            }
         }
-        Ok(statements)
+        statements
+    }
+
+    pub fn safe_parse_declaration(&mut self) -> Option<Statement> {
+        let parsed = self.parse_declaration();
+        match parsed {
+            Ok(statement) => Some(statement),
+            Err(err) => {
+                eprintln!("collecting error {err}");
+                self.errors.push(err);
+                self.recover();
+                return None;
+            }
+        }
     }
 
     pub fn parse_declaration(&mut self) -> Result<Statement, ParserError> {
@@ -465,7 +491,10 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 .peek()
                 .is_some_and(|t| t.r#type == TokenType::RightBrace)
         {
-            statements.push(self.parse_declaration()?);
+            match self.safe_parse_declaration() {
+                None => {}
+                Some(statement) => statements.push(statement),
+            }
         }
         Ok(statements)
     }
@@ -812,17 +841,20 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 .is_some_and(|t| t.r#type == TokenType::EOF)
     }
 
-    /// 'synchronize' in the book. Not used yet.
+    /// 'synchronize' in the book.
     /// The idea is that when there's an error, we don't want to show many 'cascading errors'.
     /// So we use 'anchor points' in tokens where it's likely we are back to a clean state.
-    #[allow(dead_code)]
     fn recover(&mut self) {
-        while let Some(token) = self.advance() {
+        while let Some(token) = self.tokens.peek() {
             // I think there's something nice about having an explicit match statement here: if we
             // make additions to the language, it lets us know we need to consider what we want to
             // do with the new token type here.
             match token.r#type {
-                TokenType::Semicolon => return,
+                TokenType::Semicolon => {
+                    self.advance();
+                    return;
+                }
+                TokenType::EOF => return,
                 TokenType::Class => return,
                 TokenType::Fun => return,
                 TokenType::For => return,
@@ -860,8 +892,8 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 TokenType::Identifier => {}
                 TokenType::String => {}
                 TokenType::Number => {}
-                TokenType::EOF => {}
             }
+            self.advance();
         }
     }
 
@@ -1251,10 +1283,10 @@ mod tests {
         assert!(parsed.is_err());
         assert_eq!(
             parsed.unwrap_err(),
-            ParserError::MissingClosingBraceClass {
+            vec![ParserError::MissingClosingBraceClass {
                 lexeme: "end".to_string(),
                 line: 1
-            }
+            }]
         );
     }
 

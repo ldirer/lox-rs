@@ -114,9 +114,16 @@ impl VariableResolver {
     pub fn resolve_program(
         &mut self,
         program: &mut Vec<Statement>,
-    ) -> Result<(), VariableResolverError> {
+    ) -> Result<(), Vec<VariableResolverError>> {
+        let mut errors = vec![];
         for statement in program {
-            self.resolve_statement(statement)?;
+            let resolved = self.resolve_statement(statement);
+            if let Err(err) = resolved {
+                errors.push(err)
+            }
+        }
+        if errors.len() > 0 {
+            return Err(errors);
         }
         Ok(())
     }
@@ -401,11 +408,11 @@ mod tests {
         let mut resolver = VariableResolver::new();
         let maybe_error = resolver.resolve_program(&mut program);
         assert!(maybe_error.is_err());
-        assert!(maybe_error.is_err_and(|err| err
-            == VariableResolverError::LocalVariableRedeclaredInScope {
+        assert!(maybe_error.is_err_and(|errors| errors
+            == vec![VariableResolverError::LocalVariableRedeclaredInScope {
                 line: 1,
                 name: "a".to_string()
-            }));
+            }]));
     }
 
     #[test]

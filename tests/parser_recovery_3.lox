@@ -1,0 +1,10 @@
+//Expecting (jlox, clox gives better results with 3 errors on the 3 missing semicolons):
+//[line 7] Error at 'print': Expect ';' after value.
+//[line 9] Error at 'print': Expect ';' after value.
+
+fun f() {
+    print 1
+    print 2
+    print 3
+    print 4;
+}
